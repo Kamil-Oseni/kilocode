@@ -14,7 +14,9 @@ import { SessionRunState } from "@/session/run-state"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { Storage } from "@/storage/storage"
 import { RayaGoal } from "@/kilocode/goal"
-import { replayed } from "@/kilocode/goal/compaction-lineage"
+import { replayed, usage } from "@/kilocode/goal/compaction-lineage"
+import * as Accounting from "@/kilocode/goal/accounting"
+import { collect } from "@/kilocode/goal/evidence-scope"
 import { associate, compaction } from "@/kilocode/goal/turn"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -129,8 +131,10 @@ it.live(
               modelID: model.modelID,
               providerID: model.providerID,
               path: { cwd: chat.directory, root: chat.directory },
-              cost: 0,
-              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              cost: summary ? 0.25 : 0,
+              tokens: summary
+                ? { input: 11, output: 5, reasoning: 2, cache: { read: 3, write: 1 } }
+                : { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
               finish: "stop",
               time: { created: Date.now(), completed: Date.now() },
             })
@@ -179,7 +183,7 @@ it.live(
                   for (const part of source.parts)
                     yield* sessions.updatePart({ ...part, id: PartID.ascending(), messageID: intake.id })
                   const response = yield* reply(intake.id)
-                  return { intake, response, marker }
+                  return { intake, response, marker, summary }
                 })
               const first = yield* compact()
               yield* associate(goals, runs, chat.id, sessions)
@@ -244,9 +248,64 @@ it.live(
               expect(followed.intent).toBe(armed.intent)
               expect(followed.inputs).toContain(original.id)
               expect(followed.inputs).toContain(first.intake.id)
+              const summaries = usage(rows, session, followed)
+              expect(summaries.map((row) => row.id)).toEqual([first.summary.id, second.summary.id])
+              expect(usage(foreign, session, followed)).toEqual([])
+              expect(usage(forged, session, followed)).toEqual([])
+              const unmarked = rows.map((row) =>
+                row.info.id === second.summary.id ? { ...row, info: { ...row.info, summary: false } } : row,
+              )
+              expect(usage(unmarked, session, followed).map((row) => row.id)).toEqual([first.summary.id])
+              expect(usage(rows, session, { ...followed, createdAt: Date.now() + 1 })).toEqual([])
+              expect(usage(manual, session, followed).map((row) => row.id)).toEqual([first.summary.id])
+              expect(usage(rows, session, { ...followed, intent: crypto.randomUUID() })).toEqual([])
+              const graph = yield* collect(sessions, chat.id, followed.createdAt, followed.inputs, rows)
+              expect(graph.some((row) => row.info.role === "assistant" && row.info.summary)).toBe(false)
+              expect(Accounting.sum(graph, chat.id).tokens.input).toBe(0)
+              expect(Accounting.sum(graph, chat.id, [...summaries, ...summaries]).tokens.input).toBe(22)
+              const recorded = yield* goals.recordTurn(chat.id, second.response.id, followed.intent)
+              expect(recorded?.state.usage.tokens).toEqual({
+                input: 22,
+                output: 10,
+                reasoning: 4,
+                cache: { read: 6, write: 2 },
+              })
+              expect(recorded?.state.usage.cost).toBe(0.5)
+              expect(recorded?.state.usage.toolCalls).toBe(0)
+              expect(yield* goals.recordTurn(chat.id, second.response.id, followed.intent)).toBeUndefined()
+              expect(yield* goals.get(chat.id)).toEqual(recorded?.state)
               expect((yield* goals.finished(chat.id, second.response.id))?.dispatch?.phase).toBe("finished")
-              expect((yield* goals.continued(chat.id, followed.intent))?.dispatch?.phase).toBe("queued")
-              return { info: second.response, parts: [] }
+              const queued = yield* goals.continued(chat.id, followed.intent)
+              expect(queued?.dispatch?.phase).toBe("queued")
+              if (!queued?.dispatch) throw new Error("Expected next native dispatch")
+              const started = yield* goals.dispatched(chat.id, queued.dispatch.id)
+              if (!started?.dispatch?.messageID) throw new Error("Expected reserved native input")
+              const intake = yield* sessions.updateMessage({
+                id: started.dispatch.messageID,
+                sessionID: chat.id,
+                role: "user",
+                agent: "coder",
+                model,
+                time: { created: Date.now() },
+              })
+              const part = yield* sessions.updatePart({
+                id: PartID.ascending(),
+                messageID: intake.id,
+                sessionID: chat.id,
+                type: "text",
+                synthetic: true,
+                text: "Continue this same Goal after the accounted compactions.",
+              })
+              yield* sessions.updatePart(InputReceipt.seal(intake, [part])!)
+              yield* goals.bound(chat.id, started.dispatch.id, worker)
+              const response = yield* reply(intake.id)
+              const later = yield* goals.recordTurn(chat.id, response.id, followed.intent)
+              expect(later?.state.usage.tokens).toEqual(recorded?.state.usage.tokens)
+              expect(later?.state.usage.cost).toBe(0.5)
+              expect(later?.state.usage.turns).toBe(2)
+              expect(yield* goals.recordTurn(chat.id, response.id, followed.intent)).toBeUndefined()
+              expect((yield* goals.finished(chat.id, response.id))?.dispatch?.phase).toBe("finished")
+              return { info: response, parts: [] }
             }).pipe(Effect.orDie),
           )
         }),

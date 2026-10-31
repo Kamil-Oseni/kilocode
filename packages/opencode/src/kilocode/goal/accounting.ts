@@ -6,7 +6,11 @@ import { isDeepStrictEqual } from "node:util"
 const zero = () => ({ input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } })
 
 /** Summarize one already-validated goal task graph without reading it again. */
-export const sum = (rows: readonly SessionV1.WithParts[], sessionID: SessionID) => {
+export const sum = (
+  rows: readonly SessionV1.WithParts[],
+  sessionID: SessionID,
+  usage: readonly SessionV1.Assistant[] = [],
+) => {
   const first = new Set(
     rows
       .filter((row) => row.info.sessionID === sessionID)
@@ -22,7 +26,13 @@ export const sum = (rows: readonly SessionV1.WithParts[], sessionID: SessionID) 
   const descendants = zero()
   let cost = 0
   let descendantCost = 0
-  for (const row of rows) {
+  const ids = new Set(rows.map((row) => row.info.id))
+  const summaries = usage.filter((info) => {
+    if (ids.has(info.id)) return false
+    ids.add(info.id)
+    return true
+  })
+  for (const row of [...rows, ...summaries.map((info) => ({ info, parts: [] }))]) {
     if (row.info.role !== "assistant") continue
     const child = row.info.sessionID !== sessionID
     if (!child) cost += row.info.cost
@@ -48,6 +58,7 @@ export function terminal(
   sessionID: SessionID,
   rows: readonly SessionV1.WithParts[],
   scope: readonly SessionV1.WithParts[],
+  usage: readonly SessionV1.Assistant[] = [],
 ): RayaGoal.State {
   const dispatch = state.dispatch
   if (
@@ -86,7 +97,7 @@ export function terminal(
   const recorded = state.accounted?.userID === dispatch.messageID ? state.accounted.messages : []
   if (recorded.includes(dispatch.assistantID)) return state
   const fresh = replies.filter((row) => !recorded.includes(row.info.id))
-  const total = sum(scope, sessionID)
+  const total = sum(scope, sessionID, usage)
   const added = sum(fresh, sessionID)
   const prior = state.usage.tokens ?? { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
   return {
@@ -123,6 +134,7 @@ export function closing(
   messageID: MessageID,
   rows: readonly SessionV1.WithParts[],
   scope: readonly SessionV1.WithParts[],
+  usage: readonly SessionV1.Assistant[] = [],
 ) {
   const dispatch = current.dispatch
   if (
@@ -139,6 +151,6 @@ export function closing(
     return false
   return isDeepStrictEqual(
     { ...current, revision: prior.revision },
-    terminal({ ...prior, dispatch }, sessionID, rows, scope),
+    terminal({ ...prior, dispatch }, sessionID, rows, scope, usage),
   )
 }

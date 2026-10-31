@@ -1,5 +1,5 @@
 import { Codec } from "./schema"
-import { replayed as replay } from "./compaction-lineage"
+import { replayed as replay, usage as summarized } from "./compaction-lineage"
 // raya_change - Milestone A durable native goal state and evidence audit
 import { Cause, Effect, Fiber, Schema } from "effect"
 import * as Log from "@opencode-ai/core/util/log"
@@ -2016,7 +2016,8 @@ export namespace RayaGoal {
         reasoning: 0,
         cache: { read: 0, write: 0 },
       }
-      const accounting = Accounting.sum(scope, sessionID)
+      const usage = deps.sessions.get ? summarized(messages, yield* deps.sessions.get(sessionID), state) : []
+      const accounting = Accounting.sum(scope, sessionID, usage)
       const now = Date.now()
       const changed = state.dispatch?.messageID === user.info.id && state.dispatch.intent !== (state.intent ?? "unset")
       const session = changed && deps.sessions.get ? yield* deps.sessions.get(sessionID) : undefined
@@ -2154,7 +2155,11 @@ export namespace RayaGoal {
               messages,
             )
           : undefined
-      return yield* save(sessionID, scope ? Accounting.terminal(candidate, sessionID, messages, scope) : candidate)
+      const usage = scope && deps.sessions.get ? summarized(messages, yield* deps.sessions.get(sessionID), state) : []
+      return yield* save(
+        sessionID,
+        scope ? Accounting.terminal(candidate, sessionID, messages, scope, usage) : candidate,
+      )
     })
 
     const initial = Effect.fn("RayaGoal.initial")(function* (sessionID: SessionID, intent: string, worker: string) {

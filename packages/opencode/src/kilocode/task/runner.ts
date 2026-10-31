@@ -11,6 +11,7 @@ import { MessageID, SessionID } from "@/session/schema"
 import { EffectBridge } from "@/effect/bridge"
 import { RayaGoal } from "@/kilocode/goal"
 import * as Accounting from "@/kilocode/goal/accounting"
+import { usage as summarized } from "@/kilocode/goal/compaction-lineage"
 import { collect } from "@/kilocode/goal/evidence-scope"
 import type { Criteria } from "@/kilocode/goal/criteria"
 import { RayaGoalContinuation } from "@/kilocode/goal/continuation"
@@ -2386,7 +2387,17 @@ export namespace RayaTaskRunner {
                   [...new Set([...(goal.inputs ?? []), goal.dispatch.messageID])],
                   rows,
                 )
-                if (!Accounting.closing(goal, current, sessionID, closed.messageID!, rows, graph))
+                if (
+                  !Accounting.closing(
+                    goal,
+                    current,
+                    sessionID,
+                    closed.messageID!,
+                    rows,
+                    graph,
+                    summarized(rows, session, goal),
+                  )
+                )
                   return yield* Effect.fail(err)
                 // Another callback may have closed this exact original dispatch.
                 // Validate its persisted answer without repeating the winning write.

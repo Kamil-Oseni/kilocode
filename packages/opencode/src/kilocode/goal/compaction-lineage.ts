@@ -178,3 +178,77 @@ export function replayed(
   }
   return markers.size === 0 && users.at(-1)?.info.id === input
 }
+
+/** Usage only: these assistant identities never become completion evidence or tool results. */
+export function usage(rows: readonly SessionV1.WithParts[], session: Session.Info, goal: RayaGoal.State) {
+  const dispatch = goal.dispatch
+  if (
+    rows.length > 128 ||
+    JSON.stringify(rows).length > 2 * 1024 * 1024 ||
+    goal.completion === "reply" ||
+    !goal.intent ||
+    dispatch?.intent !== goal.intent ||
+    (dispatch.phase !== "started" && dispatch.phase !== "finished") ||
+    !dispatch.messageID ||
+    !goal.inputs?.includes(dispatch.messageID) ||
+    rows.findLast((row) => row.info.role === "user")?.info.id !== dispatch.messageID ||
+    new Set(rows.map((row) => row.info.id)).size !== rows.length ||
+    rows.some(
+      (row, idx) =>
+        row.info.sessionID !== session.id ||
+        (idx > 0 &&
+          (rows[idx - 1].info.id >= row.info.id || rows[idx - 1].info.time.created > row.info.time.created)) ||
+        row.parts.some((part) => part.sessionID !== session.id || part.messageID !== row.info.id),
+    )
+  )
+    return []
+  if (goal.routine) {
+    const identity = Schema.decodeUnknownOption(record)(session.metadata?.rayaRoutine)
+    if (
+      identity._tag !== "Some" ||
+      goal.routine.sessionID !== session.id ||
+      goal.routine.agentID !== identity.value.agentID ||
+      goal.routine.runID !== identity.value.runID
+    )
+      return []
+  }
+  const accepted = new Set(goal.inputs)
+  const originals = rows.filter(
+    (row) =>
+      row.info.role === "user" && accepted.has(row.info.id) && InputReceipt.complete(row, session.id, row.info.id),
+  )
+  const result: SessionV1.Assistant[] = []
+  for (const intake of rows) {
+    if (intake.info.role !== "user" || !accepted.has(intake.info.id)) continue
+    const idx = rows.indexOf(intake)
+    const summary = rows[idx - 1]
+    if (summary?.info.role !== "assistant") continue
+    const parent = summary.info.parentID
+    const marker = rows.find((row) => row.info.id === parent)
+    const message = rows.find((row) => row.info.role === "assistant" && row.info.parentID === intake.info.id)
+    if (
+      !message ||
+      marker?.info.role !== "user" ||
+      marker.info.time.created < goal.createdAt ||
+      summary.info.time.created < goal.createdAt
+    )
+      continue
+    const user = intake.info
+    const security = (row: SessionV1.User) => ({
+      agent: row.agent,
+      model: row.model,
+      tools: row.tools,
+      system: row.system,
+      format: row.format,
+    })
+    const source = originals.findLast(
+      (row) =>
+        row.info.role === "user" &&
+        row.info.id < marker.info.id &&
+        isDeepStrictEqual(security(row.info), security(user)) &&
+        compacted(rows, row, intake, message),
+    )
+    if (source && !result.some((row) => row.id === summary.info.id)) result.push(summary.info)
+  }
+  return result
+}

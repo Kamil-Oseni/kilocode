@@ -36,6 +36,7 @@ export const ReportSetting: Component<{
   const [start, setStart] = createSignal("22:00")
   const [end, setEnd] = createSignal("07:00")
   const [error, setError] = createSignal("")
+  const blocked = () => busy() || !known() || !props.connected
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
   let id = ""
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -151,12 +152,12 @@ export const ReportSetting: Component<{
     ),
   )
   const toggle = () => {
-    if (busy() || !known() || !props.connected) return
+    if (blocked()) return
     setEditing(false)
     request(enabled() ? "disable" : "enable")
   }
   const save = () => {
-    if (busy() || !known() || !props.connected) return
+    if (blocked()) return
     const from = minute(start())
     const until = minute(end())
     if (from === undefined || until === undefined || from === until) {
@@ -180,8 +181,8 @@ export const ReportSetting: Component<{
         <Button
           size="small"
           variant="secondary"
-          disabled={busy() || !known() || !props.connected}
-          aria-disabled={busy() || !known() || !props.connected}
+          disabled={blocked()}
+          aria-disabled={blocked()}
           aria-busy={busy()}
           onClick={toggle}
         >

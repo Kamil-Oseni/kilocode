@@ -1815,7 +1815,7 @@ export namespace RayaGoal {
           !(yield* content(check, cited.filter((part) => part.sessionID === sessionID)))
         )
           return yield* new AuditError({
-            message: `Criterion ${requirement.criterionID} requires a current full Read of ${JSON.stringify(check.path)} containing every saved exact literal. The checked file must fit within 8192 UTF-8 bytes. Cite that successful Read callID in this criterion's evidence array. Missing text, partial reads and stale or unavailable content cannot pass. Correct only permitted work, read the final file again, then retry this same criterion without changing its saved check.`,
+            message: `Criterion ${requirement.criterionID} requires a current full Read of ${JSON.stringify(check.path)} containing every saved exact literal: ${JSON.stringify(check.literals)}. The checked file must fit within 8192 UTF-8 bytes. Check the actual file: add any absent saved literals within the permitted work and shorten it if it exceeds the byte limit. Repeated reads of unchanged invalid content cannot satisfy this check. After correcting the file, read it in full again and cite that successful Read callID in this criterion's evidence array. If its contents already meet the check, obtain and cite a fresh full Read instead of changing valid content. Partial reads and stale or unavailable content cannot pass. Do not change the saved criterion or claim this check proves requirements beyond these literals.`,
           })
         verified.push({ ...requirement, evidence: proof })
       }

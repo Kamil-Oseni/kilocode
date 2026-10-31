@@ -726,6 +726,9 @@ it.live(
             complete("wrong-child-read", next.criteria[0]),
           )
           expect(literal.title).toBe("Completion audit rejected")
+          expect(literal.output).toContain('["Builder consumed research."]')
+          expect(literal.output).toContain("Repeated reads of unchanged invalid content cannot satisfy this check")
+          expect(literal.output).toContain("If its contents already meet the check, obtain and cite a fresh full Read")
           expect((yield* goals.get(child.session.id))?.status).toBe("active")
           expect((yield* goals.get(child.session.id))?.auditAttempt?.accepted).toBe(false)
           yield* invoke(ctx(child, "correct-child-write"), write, {

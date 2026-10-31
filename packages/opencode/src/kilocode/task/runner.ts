@@ -3622,7 +3622,9 @@ export namespace RayaTaskRunner {
       if (yield* transfer.held().pipe(Effect.orDie)) return
       yield* repairs
       const items = yield* tasks.list()
+      const errors: RayaTask.GuardError[] = []
       for (const item of items) {
+        yield* transfer.check()
         yield* reboot(item).pipe(
           Effect.catchIf(
             (err): err is RayaTask.HistoryError => err instanceof RayaTask.HistoryError,
@@ -3631,8 +3633,15 @@ export namespace RayaTaskRunner {
                 log.error("routine history recovery unavailable", { id: err.agentID, reason: err.reason }),
               ),
           ),
+          Effect.catchIf(RayaTaskExecution.local, (err) =>
+            Effect.sync(() => {
+              errors.push(err)
+              log.error("routine execution recovery unavailable", { id: item.id, err })
+            }),
+          ),
         )
       }
+      if (errors[0]) return yield* errors[0]
     })
 
     const announce = Effect.fn("RayaTaskRunner.announce")(function* (source: string, filter?: string) {

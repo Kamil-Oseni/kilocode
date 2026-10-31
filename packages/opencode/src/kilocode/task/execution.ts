@@ -55,7 +55,19 @@ const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(va
 const same = (left: typeof Owner.Type, right: typeof Owner.Type) =>
   left.host === right.host && left.pid === right.pid && left.birth === right.birth
 
+const faults = new WeakSet<RayaTask.GuardError>()
+const fault = (message: string) => {
+  const err = new RayaTask.GuardError({ message })
+  faults.add(err)
+  return err
+}
+
 export namespace RayaTaskExecution {
+  /** Only locally diagnosed saved execution corruption may isolate one worker during restart. */
+  export function local(err: unknown): err is RayaTask.GuardError {
+    return err instanceof RayaTask.GuardError && faults.has(err)
+  }
+
   /** Verify a genuine acquired owner on its exact original work fiber. No saved row can mint this proof. */
   export function original(permit: unknown, fiber: unknown) {
     if (!permit || typeof permit !== "object") return undefined
@@ -86,7 +98,7 @@ export namespace RayaTaskExecution {
             ? Effect.succeed(undefined)
             : Schema.decodeUnknownEffect(Record)(value).pipe(
                 Effect.mapError(
-                  () => new RayaTask.GuardError({ message: "This routine's execution owner needs recovery review." }),
+                  () => fault("This routine's execution owner needs recovery review."),
                 ),
               ),
         ),
@@ -470,9 +482,7 @@ export namespace RayaTaskExecution {
       if (!current) return false
       if (current.runID === run.id && current.agentID === run.agentID && current.sessionID === run.sessionID)
         return true
-      return yield* new RayaTask.GuardError({
-        message: "This routine's retained execution identity needs recovery review.",
-      })
+      return yield* fault("This routine's retained execution identity needs recovery review.")
     })
 
     const receipt = Effect.fn("RayaTaskExecution.receipt")(function* (run: {
@@ -671,9 +681,7 @@ export namespace RayaTaskExecution {
         Effect.gen(function* () {
           const prior = yield* load(run.id)
           if (prior && (prior.runID !== run.id || prior.agentID !== run.agentID || prior.sessionID !== run.sessionID))
-            return yield* new RayaTask.GuardError({
-              message: "This routine's execution identity changed before terminal recovery.",
-            })
+            return yield* fault("This routine's execution identity changed before terminal recovery.")
           if (prior) {
             if (prior.state === undefined || prior.state === "active") return undefined
             if (prior.state === "idle" && !stopped(prior.owner)) return undefined

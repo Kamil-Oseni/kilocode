@@ -328,18 +328,25 @@ it.live(
           access: "brief",
           schedule: { kind: "manual" },
         })
+        const healthy = yield* tasks.create({
+          name: "Independent terminal worker",
+          objective: "Recover independently",
+          access: "brief",
+          schedule: { kind: "manual" },
+        })
         const now = Date.now()
         const rows = [
-          { id: "run_terminal_pair_a", sid: SessionID.make("ses_terminal_pair_a"), at: now },
-          { id: "run_terminal_pair_b", sid: SessionID.make("ses_terminal_pair_b"), at: now + 1 },
+          { id: "run_terminal_pair_a", sid: SessionID.make("ses_terminal_pair_a"), at: now, agent },
+          { id: "run_terminal_pair_b", sid: SessionID.make("ses_terminal_pair_b"), at: now + 1, agent },
+          { id: "run_terminal_healthy", sid: SessionID.make("ses_terminal_healthy"), at: now + 2, agent: healthy },
         ]
         for (const row of rows) {
           const run = {
             id: row.id,
-            agentID: agent.id,
+            agentID: row.agent.id,
             sessionID: row.sid,
             at: row.at,
-            scheduleVersion: agent.scheduleVersion ?? 1,
+            scheduleVersion: row.agent.scheduleVersion ?? 1,
             trigger: { kind: "manual" as const },
             status: "complete" as const,
             outcome: { kind: "code" as const, summary: "Saved terminal receipt.", cost: 0 },
@@ -348,12 +355,12 @@ it.live(
           yield* RayaTaskSnapshot.make({ storage }).save({
             version: 2,
             runID: run.id,
-            agentID: agent.id,
+            agentID: row.agent.id,
             at: run.at,
-            definition: agent,
-            objective: agent.objective,
+            definition: row.agent,
+            objective: row.agent.objective,
           })
-          yield* RayaGoal.make({ storage, sessions }).create(row.sid, agent.objective)
+          yield* RayaGoal.make({ storage, sessions }).create(row.sid, row.agent.objective)
           const goal = yield* RayaGoal.make({ storage, sessions }).get(row.sid)
           if (!goal) throw new Error("Expected saved goal")
           yield* storage.replace(["raya", "goal", row.sid], {
@@ -363,7 +370,7 @@ it.live(
             updatedAt: row.at,
           })
           const code = yield* spawner.exitCode(
-            ChildProcess.make(process.execPath, [fixture, dir, agent.id, row.id, row.sid], {
+            ChildProcess.make(process.execPath, [fixture, dir, row.agent.id, row.id, row.sid], {
               stdin: "ignore",
               stdout: "ignore",
               stderr: "ignore",
@@ -380,19 +387,30 @@ it.live(
         )
         const second = records.find((entry) => entry.record.runID === rows[1].id)
         if (!second) throw new Error("Expected second retained execution")
-        yield* storage.replace(second.key, { ...second.record, agentID: "changed-agent" })
+        const damaged = { ...second.record, agentID: "changed-agent" }
+        yield* storage.replace(second.key, damaged)
         const resumed = client(
           rows.map((row) => ({
             sid: row.sid,
-            agent: agent.id,
+            agent: row.agent.id,
             run: row.id,
-            version: agent.scheduleVersion ?? 1,
+            version: row.agent.scheduleVersion ?? 1,
             trigger: { kind: "manual" as const },
           })),
         )
         const runner = RayaTaskRunner.make({ database, storage, sessions: resumed })
         expect(Exit.isFailure(yield* runner.revive().pipe(Effect.exit))).toBe(true)
         expect((yield* RayaTaskInbox.make(database).page(agent.id)).messages).toHaveLength(0)
+        expect(yield* storage.read(second.key)).toEqual(damaged)
+        const remaining = yield* storage.list(["raya", "agent-executions"])
+        expect(remaining).toHaveLength(2)
+        const independent = (yield* RayaTaskInbox.make(database).page(healthy.id)).messages.filter(
+          (item) => item.source.startsWith("report:run_terminal_healthy"),
+        )
+        expect(independent).toHaveLength(1)
+        expect((yield* tasks.runsFor(healthy.id))[0]?.status).toBe("complete")
+        expect(RayaTaskExecution.local(new RayaTask.GuardError({ message: "unrelated guard" }))).toBe(false)
+        expect(RayaTaskExecution.local(new Error("unrelated error"))).toBe(false)
         yield* storage.replace(second.key, second.record)
         yield* runner.revive()
         const reports = (yield* RayaTaskInbox.make(database).page(agent.id)).messages.filter((item) =>

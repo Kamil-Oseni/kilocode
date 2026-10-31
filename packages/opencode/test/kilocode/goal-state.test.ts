@@ -5593,7 +5593,7 @@ describe("RayaGoal", () => {
     }),
   )
 
-  it.live("goal reads isolate malformed records and cleanup failures", () =>
+  paging.live("goal reads isolate malformed records and cleanup failures", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service
       const goals = setup(storage, () => [])
@@ -5642,7 +5642,7 @@ describe("RayaGoal", () => {
     }),
   )
 
-  it.effect("goal cleanup bounds namespace scans while directly validating requested records", () =>
+  paging.effect("goal cleanup bounds namespace scans while directly validating requested records", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service
       let scans = 0
@@ -5699,7 +5699,7 @@ describe("RayaGoal", () => {
     }),
   )
 
-  it.effect("goal cleanup releases its scan guard after interruption and storage failure", () =>
+  paging.effect("goal cleanup releases its scan guard after interruption and storage failure", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service
       const entered = yield* Deferred.make<void>()
@@ -5752,7 +5752,7 @@ describe("RayaGoal", () => {
     }),
   )
 
-  it.live("expires completed goals after one month without pruning blocked work", () =>
+  paging.live("expires completed goals after one month without pruning blocked work", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service
       const goals = setup(storage, () => [])

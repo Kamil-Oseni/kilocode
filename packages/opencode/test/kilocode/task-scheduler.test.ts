@@ -28,15 +28,35 @@ import { RayaGoalContinuation } from "@/kilocode/goal/continuation"
 import { RayaRoutineOccurrenceTable } from "@opencode-ai/core/kilocode/routine.sql"
 import { eq, sql } from "drizzle-orm"
 import { SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { Session } from "@/session/session"
 import { createHash } from "node:crypto"
 import { spawnSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { owner, stopped } from "@/kilocode/task/owner"
 import { testEffect } from "../lib/effect"
-import { tmpdirScoped } from "../fixture/fixture"
+import { provideTmpdirInstance, tmpdirScoped } from "../fixture/fixture"
+import { database, storage } from "./fixtures/effect-profile"
 
 const it = testEffect(LayerNode.compile(LayerNode.group([FSUtil.node, Git.node, CrossSpawnSpawner.node])))
+const expiry = testEffect(
+  LayerNode.compile(
+    LayerNode.group([
+      Session.node,
+      SessionProjector.node,
+      Storage.node,
+      Database.node,
+      FSUtil.node,
+      Git.node,
+      CrossSpawnSpawner.node,
+    ]),
+    [
+      [Database.node, database],
+      [Storage.node, storage],
+    ],
+  ),
+)
 const state = (directory: string) =>
   Storage.layerFromDir(path.join(directory, "storage")).pipe(
     Layer.provideMerge(Database.layerFromPath(path.join(directory, "queue.sqlite"))),
@@ -707,16 +727,18 @@ for (const stage of ["linked", "starting", "unknown"] as const) {
   )
 }
 
-it.live("goal expiry preserves routine references and defers cleanup when their evidence is uncertain", () =>
-  Effect.gen(function* () {
-    const directory = yield* tmpdirScoped()
-    yield* Effect.gen(function* () {
+expiry.live("goal expiry preserves routine references and defers cleanup when their evidence is uncertain", () =>
+  provideTmpdirInstance(() =>
+    Effect.gen(function* () {
       const storage = yield* Storage.Service
       const database = yield* Database.Service
-      const runner = RayaTaskRunner.make({ storage, database, sessions })
+      const sessions = yield* Session.Service
+      const tasks = RayaTask.make({ storage, database })
       const goals = RayaGoal.make({ storage, sessions })
-      const agent = yield* runner.tasks.create({ name: "Delayed", objective: "Report", schedule: { kind: "manual" } })
-      const sid = SessionID.make("ses_delayed_goal")
+      const agent = yield* tasks.create({ name: "Delayed", objective: "Report", schedule: { kind: "manual" } })
+      const session = yield* sessions.create({})
+      const sid = session.id
+      expect((yield* sessions.get(sid)).id).toBe(sid)
       const old = Date.now() - 31 * 24 * 60 * 60 * 1000
       const goal = {
         objective: "Report",
@@ -727,11 +749,18 @@ it.live("goal expiry preserves routine references and defers cleanup when their 
         progress: [],
         audit: { summary: "Verified report", verifiedAt: old, requirements: [] },
       }
-      yield* runner.tasks.record({ id: "delayed", agentID: agent.id, sessionID: sid, at: old, status: "running" })
+      // Retention consumes native saved history; completion settlement has separate coverage.
+      yield* tasks.record({
+        id: "delayed",
+        agentID: agent.id,
+        sessionID: sid,
+        at: old,
+        status: "complete",
+        outcome: { kind: "notify", summary: "Verified report" },
+      })
       yield* storage.replace(["raya", "goal", sid], goal)
       expect((yield* goals.get(sid))?.status).toBe("complete")
-      yield* runner.settle(sid)
-      expect((yield* runner.tasks.runsFor(agent.id))[0]).toMatchObject({
+      expect((yield* tasks.runsFor(agent.id))[0]).toMatchObject({
         status: "complete",
         outcome: { summary: "Verified report" },
       })
@@ -766,8 +795,8 @@ it.live("goal expiry preserves routine references and defers cleanup when their 
       expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true)
       expect(yield* storage.read(["raya", "goal", sid])).toEqual(goal)
       expect(yield* goals.get(sid)).toBeUndefined()
-    }).pipe(Effect.provide(state(directory)))
-  }),
+    }),
+  ),
 )
 
 it.live(

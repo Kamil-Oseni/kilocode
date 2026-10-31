@@ -4,6 +4,22 @@ Updated October 31, 2026. Priority: stable chat and routine workers. Voice is de
 
 ## Current installed checkpoint
 
+October 31, 2026 -- Installed recovery isolation and verified local coding workflow
+
+Installed source `ead06c59b8`, package `7.4.23-snapshot+ead06c59b8.local.1793443472853`. Qualified delivery `.tmp/new-pc/worker-ead06c59b8-delivery-qualified.json`, SHA-256 `bb74da9dc01c729ba4bb7f1cfcf26fe1c6f79bd13dd1c6b6bc087092ea2c6072`. Installation preserved 6,586 existing saved files and unrelated registrations. Startup recovery now keeps a locally corrupted execution record held, recovers independent routines, and reports the original error. The actual baseline reproduced stranded independent recovery; the corrected native case passed 13 assertions. CLI types, scoped lint and stock package checks passed. Stock build target exit zero and forced owned descendant cleanup remain distinct.
+
+The actual newly installed normal-profile local Code-primary 9B workflow passed in 27.979 seconds: two complete native file reads, one correct edit to `sum.ts`, and native `bun test ./sum.test.ts` with exit zero and three passing tests, followed by the exact requested completion marker. Tests and package files stayed unchanged, no extra fixture files appeared, and no workers were admitted. The prepared fixture's original baseline had one passing and two failing tests. This earns the narrow Strict installed Coder gate. Outcome `.tmp/business-20261022/normal-service-641aae96-5131-4842-85df-6ebf0a672780/installed-code-final-outcome.json`, SHA-256 `49b21259ab35cb445fded196af56305e54ee715597926baced314700dc8f151f`, binds the actual installed CLI, immutable input, tool trace, exact file hashes, idle state, joined closure and released Windows model.
+
+The first startup attempt timed out at its initial 20-second authenticated path request before any prompt. It was closed and retained. After a fresh safe startup review, the unchanged installed producer became ready in 23.010 seconds using a bounded 60-second path-request budget. This driver adjustment is not a source startup-latency fix or boot/reinstall acceptance. The successful workflow then closed its exact owned backend with readers joined and released its Code9B model; forced backend exit one remains recorded separately from the original driver exit zero.
+
+Installed gates are now **3/9 (33.3%)**, with six unearned; overall project readiness remains **unmeasured**. No VS Code window was open during this acceptance, so loaded UI, General chat/drafts/reopen and window placement remain pending. Scheduled execution, Memory, matching-version postboot and populated reinstall recovery remain pending; voice is deferred. The earlier three-worker native source flow completed, but its generated drafts still falsely claimed fresh browsing and visual/business-content acceptance remains unearned. Earlier checkpoints below retain their original producer identities and outcomes.
+
+## Historical checkpoints
+
+The entries below describe their own earlier builds. References to "current", "latest", "installed" or "next" in those records do not replace the current installed checkpoint above.
+
+### Earlier October 31 installed read checkpoint
+
 October 31, 2026 -- Completed native worker flow and installed read checks
 
 Installed source `11a5bca289`, package `7.4.23-snapshot+11a5bca289.local.1793441762738`. Delivery receipt `.tmp/new-pc/worker-11a5bca289-delivery-qualified.json`, SHA-256 `2e1692a89c897197a5e28caeed6fe27a9c8473fb6365bf951d62cb6bc3162046`. The normal installation preserved 6,568 existing saved files and unrelated extension registrations. CLI types, relevant lint and focused native fixtures passed; the stock package checks passed. The build target exited successfully but its owned descendant cleanup was forced, so natural process-family closure is not claimed.
@@ -13,10 +29,6 @@ The actual normal-profile source run at `4c4af659cf` completed Researcher, Build
 The newly installed compiled backend passed a real strict read-only request and an explicit one-sentence summary request in the same normal-profile session. Both made actual complete file reads, started zero workers, and returned accurate responses for the small operator-supplied input. The first acknowledgement is explicitly native-host authored with zero model usage; the requested summary is model authored. All three completed routine report cards remained available after installation. Outcome `.tmp/business-20261022/normal-service-d3da8497-c202-471f-9e2d-3dd45639f8a6/installed-chat-final-outcome.json`, SHA-256 `8b2dbcf77bcf4775bcd413b02fc192f39dd06879ea824f79588bb29c79e6c994`, records idle status, zero active workers, forced owned backend closure, joined readers and released Windows models. These are narrow installed checks, not broad chat or UI acceptance.
 
 An already-open VS Code host's loaded version remains unverified; reopen or reload the Raya window before the next UI test. Loaded UI, saved drafts/reopen, factual output quality, scheduled execution, Memory, post-boot recovery and populated reinstall workflow acceptance remain pending. Installed gates remain **2/9 (22.2%)**; overall readiness is **unmeasured**. Stable chat and local routine workers remain the priority; voice is deferred. Earlier checkpoints below retain their original producer identities and outcomes.
-
-## Historical checkpoints
-
-The entries below describe their own earlier builds. References to "current", "latest", "installed" or "next" in those records do not replace the current installed checkpoint above.
 
 ### October 31: earlier source attempts
 

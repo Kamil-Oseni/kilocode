@@ -2,6 +2,32 @@
 
 Updated October 31, 2026. Stable chat and routine workers are the priority; voice is deferred.
 
+October 31, 2026 -- Installed recovery isolation and verified local coding workflow
+
+Installed source `ead06c59b8`, package `7.4.23-snapshot+ead06c59b8.local.1793443472853`. Qualified delivery `.tmp/new-pc/worker-ead06c59b8-delivery-qualified.json`, SHA-256 `bb74da9dc01c729ba4bb7f1cfcf26fe1c6f79bd13dd1c6b6bc087092ea2c6072`. Installation preserved 6,586 existing saved files and unrelated registrations. Startup recovery now keeps a locally corrupted execution record held, recovers independent routines, and reports the original error. The actual baseline reproduced stranded independent recovery; the corrected native case passed 13 assertions. CLI types, scoped lint and stock package checks passed. Stock build target exit zero and forced owned descendant cleanup remain distinct.
+
+The actual newly installed normal-profile local Code-primary 9B workflow passed in 27.979 seconds: two complete native file reads, one correct edit to `sum.ts`, and native `bun test ./sum.test.ts` with exit zero and three passing tests, followed by the exact requested completion marker. Tests and package files stayed unchanged, no extra fixture files appeared, and no workers were admitted. The prepared fixture's original baseline had one passing and two failing tests. This earns the narrow Strict installed Coder gate. Outcome `.tmp/business-20261022/normal-service-641aae96-5131-4842-85df-6ebf0a672780/installed-code-final-outcome.json`, SHA-256 `49b21259ab35cb445fded196af56305e54ee715597926baced314700dc8f151f`, binds the actual installed CLI, immutable input, tool trace, exact file hashes, idle state, joined closure and released Windows model.
+
+The first startup attempt timed out at its initial 20-second authenticated path request before any prompt. It was closed and retained. After a fresh safe startup review, the unchanged installed producer became ready in 23.010 seconds using a bounded 60-second path-request budget. This driver adjustment is not a source startup-latency fix or boot/reinstall acceptance. The successful workflow then closed its exact owned backend with readers joined and released its Code9B model; forced backend exit one remains recorded separately from the original driver exit zero.
+
+Installed gates are now **3/9 (33.3%)**, with six unearned; overall project readiness remains **unmeasured**. No VS Code window was open during this acceptance, so loaded UI, General chat/drafts/reopen and window placement remain pending. Scheduled execution, Memory, matching-version postboot and populated reinstall recovery remain pending; voice is deferred. The earlier three-worker native source flow completed, but its generated drafts still falsely claimed fresh browsing and visual/business-content acceptance remains unearned. Earlier checkpoints below retain their original producer identities and outcomes.
+
+| Gate | Status | Evidence or remaining work |
+|---|---|---|
+| Audited combined candidate | Verified for installed ead06c59b8 | Qualified CLI, helper and package match the source; stock target success and descendant cleanup are recorded separately. |
+| Normal installation preservation | Verified for installed ead06c59b8 | This installation preserved 6,586 saved files, exact payloads and unrelated registrations. Loaded recovery is separate. |
+| Installed local General/tool turn | Pending | Earlier 11a5 backend read and summary controls passed; loaded UI, saved drafts/model and close/reopen still need acceptance. |
+| Strict installed Coder | Verified for installed ead06c59b8 | Actual normal-profile local Code9B reads, correct scoped edit, native three-test command exit zero, exact completion marker, unchanged tests/package, no workers, idle joined closure. GUI acceptance is separate. |
+| Installed Voice and permitted HA flow | Deferred by user | Voice is not the current priority. Home Assistant remains off. |
+| Scheduled routines | Pending | Earlier source three-worker native handoffs/waits/wakes completed. Factual business output and genuine scheduled execution remain unearned. |
+| Configured Memory | Pending | Installed setup, correction/forget, in-flight pause and index outcomes remain unearned. Preserve uncertain captures without replay. |
+| Matching-version postboot/service recovery | Pending | Actual boot, reconnection and no unsolicited replay still need observation. Controlled recovery isolation and one cold startup do not prove this gate. |
+| Populated same-candidate reinstall recovery | Pending | Loaded populated-state, rollback and cold restore remain unearned. Closed-file preservation alone does not establish them. |
+
+## Historical checkpoints
+
+The following entries describe their own earlier builds and gate tables; they do not replace the current checkpoint above.
+
 October 31, 2026 -- Completed native worker flow and installed read checks
 
 Installed source `11a5bca289`, package `7.4.23-snapshot+11a5bca289.local.1793441762738`. Delivery receipt `.tmp/new-pc/worker-11a5bca289-delivery-qualified.json`, SHA-256 `2e1692a89c897197a5e28caeed6fe27a9c8473fb6365bf951d62cb6bc3162046`. The normal installation preserved 6,568 existing saved files and unrelated extension registrations. CLI types, relevant lint and focused native fixtures passed; the stock package checks passed. The build target exited successfully but its owned descendant cleanup was forced, so natural process-family closure is not claimed.
@@ -12,7 +38,7 @@ The newly installed compiled backend passed a real strict read-only request and 
 
 An already-open VS Code host's loaded version remains unverified; reopen or reload the Raya window before the next UI test. Loaded UI, saved drafts/reopen, factual output quality, scheduled execution, Memory, post-boot recovery and populated reinstall workflow acceptance remain pending. Installed gates remain **2/9 (22.2%)**; overall readiness is **unmeasured**. Stable chat and local routine workers remain the priority; voice is deferred. Earlier checkpoints below retain their original producer identities and outcomes.
 
-## Installed version and evidence
+### Earlier installed version and evidence
 
 October 29, 2026 -- Explicit native file-content completion checks
 

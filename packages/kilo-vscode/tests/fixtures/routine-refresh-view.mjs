@@ -49,7 +49,7 @@ globalThis.acquireVsCodeApi = () => ({
   getState: () => undefined,
   setState: () => {},
 })
-const { createComponent } = await import("solid-js")
+const { createComponent, createSignal } = await import("solid-js")
 const { render } = await import("solid-js/web")
 const { VSCodeProvider } = await import("../../webview-ui/src/context/vscode.tsx")
 const { LanguageContext } = await import("../../webview-ui/src/context/language.tsx")
@@ -279,7 +279,90 @@ try {
   emit({ type: "connectionState", state: "disconnected" })
   emit({ type: "localInferenceChanged", sessionID: "ses_live" })
   assert.equal(count(), before + 2)
-  console.log("routine-refresh-view: refresh, inference invalidation and pending-retention checks passed")
+  const { ReportSetting } = await import("../../webview-ui/src/components/routines/ReportSetting.tsx")
+  const [online, connect] = createSignal(false)
+  const [scope, select] = createSignal("report-a")
+  const panel = document.createElement("div")
+  root.append(panel)
+  const alarms = new Map()
+  const schedule = globalThis.setTimeout
+  globalThis.setTimeout = (fn, delay, ...args) => {
+    const timer = schedule(fn, delay, ...args)
+    if (delay === 30_000) alarms.set(timer, () => fn(...args))
+    return timer
+  }
+  const stop = render(
+    () =>
+      createComponent(VSCodeProvider, {
+        get children() {
+          return createComponent(ReportSetting, {
+            get agentID() {
+              return scope()
+            },
+            get connected() {
+              return online()
+            },
+          })
+        },
+      }),
+    panel,
+  )
+  const calls = () => sent.filter((msg) => msg.type === "routineContactDestination")
+  const setting = (text) => [...panel.querySelectorAll("button")].find((item) => item.textContent.trim() === text)
+  const answer = (request, enabled) =>
+    emit({ type: "routineContactDestination", requestID: request.requestID, agentID: request.agentID, enabled })
+  try {
+    const before = calls().length
+    assert.match(panel.textContent, /Reconnect/)
+    connect(true)
+    const initial = calls().at(-1)
+    assert.equal(calls().length, before + 1)
+    assert.equal(initial.action, "load")
+    answer(initial, true)
+    assert.equal(setting("Stop reports").disabled, false)
+    setting("Stop reports").click()
+    const mutation = calls().at(-1)
+    assert.equal(mutation.action, "disable")
+    connect(false)
+    answer(mutation, false)
+    assert.match(panel.textContent, /Reconnect/)
+    connect(true)
+    const reload = calls().at(-1)
+    assert.equal(reload.action, "load", "Reconnect only reads, never repeats the mutation")
+    assert.notEqual(reload.requestID, mutation.requestID)
+    answer(mutation, false)
+    assert.ok(setting("Checking..."))
+    answer(reload, true)
+    setting("Stop reports").click()
+    const uncertain = calls().at(-1)
+    assert.equal(uncertain.action, "disable")
+    const expired = [...alarms.values()].at(-1)
+    expired()
+    assert.match(panel.textContent, /could not be confirmed/)
+    assert.equal(setting("Stop reports").disabled, true)
+    const count = calls().length
+    answer(uncertain, false)
+    assert.equal(calls().length, count, "Timeout never replays a mutation")
+    assert.ok(setting("Retry"))
+    setting("Retry").click()
+    const retry = calls().at(-1)
+    assert.equal(retry.action, "load")
+    select("report-b")
+    const changed = calls().at(-1)
+    assert.equal(changed.agentID, "report-b")
+    answer(retry, true)
+    assert.ok(setting("Checking..."), "Previous scope cannot settle the selected scope")
+    answer(changed, false)
+    assert.equal(setting("Allow reports").disabled, false)
+    assert.equal(calls().filter((msg) => msg.action === "disable").length, 2)
+    assert.equal(calls().filter((msg) => msg.action === "enable" || msg.action === "save").length, 0)
+  } finally {
+    stop()
+    for (const timer of alarms.keys()) clearTimeout(timer)
+    globalThis.setTimeout = schedule
+    panel.remove()
+  }
+  console.log("routine-refresh-view: refresh and report-setting timeout/reconnect checks passed")
 } finally {
   dispose()
   root.remove()

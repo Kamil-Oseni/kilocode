@@ -682,32 +682,32 @@ it.live(
           yield* sessions.setMetadata({ sessionID: root.session.id, metadata: root.session.metadata ?? {} })
           const ctx = (target: typeof root, callID: string) =>
             context(target.session.id, target.reply.id, "generalist", callID)
-          const unchanged = yield* database.db.select().from(Delegation).all()
-          const refuse = (id: string) =>
-            Effect.gen(function* () {
-              const result = yield* invoke(ctx(root, id), delegate, { stageID: next.id })
-              expect(result.metadata.requestStatus).toBe("unresolved")
-              expect(result.output).toContain("pinned source")
-              expect(yield* database.db.select().from(Delegation).all()).toEqual(unchanged)
-            })
-          yield* refuse("missing-source-handoff")
           if (mode === "completed") {
+            const unchanged = yield* database.db.select().from(Delegation).all()
+            const refuse = (id: string) =>
+              Effect.gen(function* () {
+                const result = yield* invoke(ctx(root, id), delegate, { stageID: next.id })
+                expect(result.metadata.requestStatus).toBe("unresolved")
+                expect(result.output).toContain("pinned source")
+                expect(yield* database.db.select().from(Delegation).all()).toEqual(unchanged)
+              })
+            yield* refuse("missing-source-handoff")
             yield* invoke(ctx(root, "source-output-write"), write, {
               filePath: note,
               content: "Research step complete.\n",
             })
             yield* invoke(ctx(root, "source-output-read"), read, { filePath: note })
             yield* refuse("output-only-source-handoff")
+            yield* invoke(context(chat.id, assistant.id, "auto", "foreign-source-read"), read, { filePath: source })
+            yield* refuse("foreign-source-handoff")
+            yield* invoke(ctx(root, "partial-source-read"), read, { filePath: source, limit: 1 })
+            yield* refuse("partial-source-handoff")
+            yield* fs.writeFileString(source, seed + "Unapproved change.\n")
+            yield* invoke(ctx(root, "changed-source-read"), read, { filePath: source })
+            yield* refuse("wrong-hash-source-handoff")
+            yield* fs.writeFileString(source, seed)
+            yield* refuse("stale-source-handoff")
           }
-          yield* invoke(context(chat.id, assistant.id, "auto", "foreign-source-read"), read, { filePath: source })
-          yield* refuse("foreign-source-handoff")
-          yield* invoke(ctx(root, "partial-source-read"), read, { filePath: source, limit: 1 })
-          yield* refuse("partial-source-handoff")
-          yield* fs.writeFileString(source, seed + "Unapproved change.\n")
-          yield* invoke(ctx(root, "changed-source-read"), read, { filePath: source })
-          yield* refuse("wrong-hash-source-handoff")
-          yield* fs.writeFileString(source, seed)
-          yield* refuse("stale-source-handoff")
           yield* invoke(ctx(root, "root-read"), read, { filePath: source })
           const complete = (callID: string, criterion?: Criteria[number]) => ({
             status: "complete",

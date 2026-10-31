@@ -1,3 +1,9 @@
+October 31, 2026 -- Installed cold-chat checkpoint
+
+Installed `057ce337a6` preserved exact ordinary conversation messages/parts across backend closure and cold reopen. The follow-up still violated its explicit no-tools instruction through `chief_route` and an ephemeral Task child; the parent corrected the final marker/no-actions meaning, but stored replies retain stray `"}`. This is not stable-chat acceptance. Failed proof SHA-256 `20fc5d7b087a1358e970656610d3281d9c7766f48d0c7c2c4bb911578fa0a05f`; closed cold-owner seal SHA-256 `f6991cb9e7f5d9002b1c642311ed2640da1fde93eedfc3b2f4165d6053085c5d`, both under `.tmp/business-20261022/normal-service-3a44c042-3d18-442c-8dbe-c75f70c4fdce/`. Both original drivers joined with exit zero; exact backend forced closure/readers and owned model release remain separate. All eight definitions/85 saved runs remained unchanged, with zero new Routine admissions; one Task child did execute.
+
+Pinned-source Read candidate `c45df9de09` is qualified only in source (two native scenarios/315 assertions, types, lint and guards), not built or installed. The next fix targets authenticated conversation-only routing before one bundled delivery and a small installed retry. Existing three-worker engine acceptance remains on installed057; it is not repeated or expanded into semantic/business acceptance. Broad verified components **3/9 (33.3%)**; overall readiness **unmeasured**. See `Raya-Implementation-Progress.md` for exact receipts and limits. Voice remains deferred and second-PC migration cancelled.
+
 # Routine calendar scheduling
 
 ## Current installed validation

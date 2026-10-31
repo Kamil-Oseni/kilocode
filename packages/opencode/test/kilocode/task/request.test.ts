@@ -23,6 +23,28 @@ test("budget omission is explicit and preserves requested limits and examples", 
 })
 
 test("field omission keeps deadline and budget choices separate", () => {
+  for (const text of [
+    "Omit TOP-LEVEL context/budget/deadline only.",
+    "Omit top level context/budget/deadline only.",
+    "Omit the top-level context, budget and deadline.",
+    "Omit context / budget / deadline.",
+  ])
+    for (const field of ["budget", "deadline", "context"] as const) expect(omits(text, field)).toBe(true)
+  for (const text of [
+    "Do not omit top-level context/budget/deadline.",
+    "Never omit top level context/budget/deadline.",
+    "Don't omit context/budget/deadline.",
+    'Explain "Omit TOP-LEVEL context/budget/deadline only."',
+    "`Omit TOP-LEVEL context/budget/deadline only.`",
+    "```\nOmit TOP-LEVEL context/budget/deadline only.\n```",
+    "~~~\nOmit TOP-LEVEL context/budget/deadline only.\n~~~",
+    "> Omit TOP-LEVEL context/budget/deadline only.",
+    "Read-only status review. Omit TOP-LEVEL context/budget/deadline only.",
+  ])
+    for (const field of ["budget", "deadline", "context"] as const) expect(omits(text, field)).toBe(false)
+  expect(omits("Omit top-level context only.", "context")).toBe(true)
+  expect(omits("Omit top-level context only.", "budget")).toBe(false)
+  expect(omits("Omit top-level context only.", "deadline")).toBe(false)
   expect(omits("Omit budget and deadline keys.", "deadline")).toBe(true)
   expect(omits("Omit deadline and budget keys.")).toBe(true)
   expect(omits("Omit the deadline field.", "deadline")).toBe(true)

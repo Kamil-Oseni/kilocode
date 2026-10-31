@@ -75,12 +75,15 @@ export function prohibits(request: string | undefined) {
 
 /** Honor explicit field omission without interpreting an absent budget as permission to spend. */
 export function omits(request: string | undefined, field: "budget" | "deadline" | "context" = "budget") {
-  if (!request) return false
-  const text = request.replace(/```[\s\S]*?```/g, "").replace(/^\s*>.*$/gm, "")
+  if (!request || inspection(request)) return false
+  const text = request
+    .replace(/```[\s\S]*?```|~~~[\s\S]*?~~~/g, "")
+    .replace(/^\s*>.*$/gm, "")
+    .replace(/\u201c[^\u201d]*\u201d|\u2018[^\u2019]*\u2019|"[^"]*"|`[^`]*`|(?:^|\s)'[^'\r\n]*'/g, "")
   return (
     [
       ...text.matchAll(
-        /\bomit\s+(?:(?:the|any|a)\s+)?((?:budget|deadline|context)(?:\s*(?:,|and|&)\s*(?:budget|deadline|context))*)\b/gi,
+        /\bomit\s+(?:(?:the|any|a)\s+)?(?:top[ -]level\s+)?((?:budget|deadline|context)(?:\s*(?:,|\/|and|&)\s*(?:budget|deadline|context))*)\b/gi,
       ),
     ].some(
       (match) =>

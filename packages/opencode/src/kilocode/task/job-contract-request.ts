@@ -1,4 +1,4 @@
-import { inspection, prohibits } from "./request"
+import { inspection, kickoff, prohibits } from "./request"
 
 /** Classify only an explicit native contract instruction; the caller must authenticate its owner. */
 export function required(request: string | undefined) {
@@ -7,7 +7,13 @@ export function required(request: string | undefined) {
     .replace(/```[\s\S]*?```|~~~[\s\S]*?~~~/g, "")
     .replace(/^\s*>.*$/gm, "")
     .replace(/\u201c[^\u201d]*\u201d|\u2018[^\u2019]*\u2019|"[^"]*"|`[^`]*`|(?:^|\s)'[^'\r\n]*'/g, "")
-  return /(?:^|[.!?;\n])\s*(?:please\s+)?(?:use|call)\s+native\s+assign_organization_work\s+with\s+(?:(?:a|the)\s+)?version\s*1\s+contract\b/i.test(
-    text,
+  return (
+    /(?:^|[.!?;\n])\s*(?:please\s+)?(?:use|call)\s+native\s+assign_organization_work\s+with\s+(?:(?:a|the)\s+)?version\s*1\s+contract\b/i.test(
+      text,
+    ) ||
+    (kickoff(request) &&
+      /(?:^|[.!?;\n])\s*(?:please\s+)?supply\s+only\s+(?:[^.!?;\n]{0,160}\band\s+)?contract\s+at\s+top[ -]level\b/i.test(
+        text,
+      ))
   )
 }

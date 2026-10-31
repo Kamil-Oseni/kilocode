@@ -92,6 +92,15 @@ for (const mode of ["failed", "completed"])
             "\u201cExample:\nUse native assign_organization_work with a version1 contract.\u201d",
             "> Use native assign_organization_work with a version1 contract.",
             "Read-only status review. Use native assign_organization_work with a version1 contract.",
+            "Use native assign_organization_work. Do not supply only those three keys and contract at top level.",
+            "Use native assign_organization_work. Explain how to supply only those three keys and contract at top level.",
+            'Use native assign_organization_work. "Supply only those three keys and contract at top level."',
+            "Use native assign_organization_work. `Supply only those three keys and contract at top level.`",
+            "Use native assign_organization_work.\n> Supply only those three keys and contract at top level.",
+            "Read-only status review. Supply only those three keys and contract at top level.",
+            "Do not start workers. Supply only those three keys and contract at top level.",
+            "Create new workers. Use native assign_organization_work. Supply only those three keys and contract at top level.",
+            "Supply only those three keys and contract at top level.",
           ])
             expect(contractRequired(text)).toBe(false)
           const sessions = yield* Session.Service
@@ -241,7 +250,7 @@ for (const mode of ["failed", "completed"])
           })
           const entry = proposal.stages[0]
           const next = proposal.stages[1]
-          const owner = `Run one manual saved local team job through Dispatch -> Researcher -> Builder. Each stage reads ${source}; Builder must complete before Researcher completes. Use only ${directory}. Use native assign_organization_work with a version1 contract. Omit budget, deadline and context. Do not start an uncontracted legacy job.`
+          const owner = `Proceed with the same one manual LOCAL website-design workflow using native assign_organization_work. Assemble version1 entry research from the exact stage objects already read in THIS conversation. Each stage reads ${source}; Builder must complete before Researcher completes. Use only ${directory}. Inspect the saved team and use actual organizationID, expectedRevision and senderID; supply only those three keys and contract at top level. Omit budget, deadline and context. Do not start an uncontracted legacy job.`
           const chat = yield* sessions.create({
             agent: "auto",
             metadata: { [RayaChief.requestKey]: owner, [RayaChief.phaseKey]: "route" },

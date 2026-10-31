@@ -766,23 +766,24 @@ expiry.live("goal expiry preserves routine references and defers cleanup when th
       })
       expect((yield* goals.get(sid))?.audit?.summary).toBe("Verified report")
       yield* storage.remove(["raya", "agent-runs", agent.id])
-      yield* storage.replace(["raya", "agent-claims", "retained"], {
+      const key = ["raya", "agent-claims", createHash("sha256").update(agent.id).digest("hex")]
+      yield* storage.replace(key, {
         version: 1,
         id: "delayed",
         agentID: agent.id,
         sessionID: sid,
       })
       expect((yield* goals.get(sid))?.status).toBe("complete")
-      yield* storage.replace(["raya", "agent-claims", "retained"], {
+      yield* storage.replace(key, {
         version: 1,
         id: "uncertain",
         agentID: agent.id,
       })
       expect((yield* goals.get(sid))?.status).toBe("complete")
-      yield* storage.remove(["raya", "agent-claims", "retained"])
-      yield* storage.replace(["raya", "agent-runs", agent.id], [{ broken: true }])
+      yield* storage.remove(key)
+      yield* storage.replace(["raya", "agent-runs", agent.id], [{ id: "broken", broken: true }])
       expect((yield* goals.get(sid))?.status).toBe("complete")
-      expect(yield* storage.read(["raya", "agent-runs", agent.id])).toEqual([{ broken: true }])
+      expect(yield* storage.read(["raya", "agent-runs", agent.id])).toEqual([{ id: "broken", broken: true }])
       yield* storage.remove(["raya", "agent-runs", agent.id])
       const interrupted = RayaGoal.make({
         storage: {

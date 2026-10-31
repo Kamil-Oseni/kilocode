@@ -5,6 +5,7 @@ import { Effect, Option, Schema } from "effect"
 import { digest } from "@opencode-ai/core/kilocode/evidence-digest"
 import { record } from "@/kilocode/task/continuation"
 import type { Session } from "@/session/session"
+import type { MessageV2 } from "@/session/message-v2"
 import { RayaGoal } from "."
 import type { MessageID, SessionID } from "@/session/schema"
 import * as Native from "./native"
@@ -14,6 +15,7 @@ type Check = () => Effect.Effect<boolean>
 const owners = new WeakMap<JSONSchema7, Read>()
 const checks = new WeakMap<Record<string, AITool>, Check>()
 const workflows = new WeakMap<Check, Check>()
+const views = new WeakMap<Check, Read>()
 const routines = new WeakMap<Check, (session: Session.Info) => Effect.Effect<boolean>>()
 
 export function owned(schema: JSONSchema7, read: Read) {
@@ -53,6 +55,7 @@ export const prepare = Effect.fn("GoalToolGate.prepare")(function* (
         saved.audit?.verifiedAt !== undefined
       )
     })
+  views.set(check, read)
   workflows.set(check, () =>
     Effect.gen(function* () {
       if ((yield* current()) !== message) return false
@@ -244,6 +247,79 @@ export function routine(tools: Record<string, AITool>, session: Session.Info) {
   const check = checks.get(tools)
   return check ? (routines.get(check)?.(session) ?? Effect.succeed(false)) : Effect.succeed(false)
 }
+
+/** Supersede only repeated native Goal snapshots in ephemeral model context; durable receipts remain unchanged. */
+export const project = Effect.fn("GoalToolGate.project")(function* (
+  tools: Record<string, AITool>,
+  session: Session.Info,
+  rows: MessageV2.WithParts[],
+) {
+  const check = checks.get(tools)
+  const read = check && views.get(check)
+  if (!read || !(yield* routine(tools, session))) return rows
+  const goal = yield* read(session.id)
+  const user = goal?.dispatch?.messageID
+  if (!goal || !user || rows.findLast((row) => row.info.role === "user")?.info.id !== user) return rows
+  if (rows.length > 128 || rows.some((row) => row.parts.length > 256)) return rows
+  const entries = rows
+    .flatMap((row) => {
+      if (row.info.role !== "assistant" || row.info.parentID !== user || row.info.sessionID !== session.id) return []
+      return row.parts.flatMap((part) => {
+        if (
+          part.type !== "tool" ||
+          part.tool !== "get_goal" ||
+          part.state.status !== "completed" ||
+          part.sessionID !== session.id ||
+          part.messageID !== row.info.id ||
+          part.state.time.compacted ||
+          part.state.time.start < goal.createdAt ||
+          part.state.time.end < part.state.time.start
+        )
+          return []
+        const saved = Option.getOrUndefined(Schema.decodeUnknownOption(proof)(part.state.metadata[key]))
+        const parsed = Option.getOrUndefined(Schema.decodeUnknownOption(output)(part.state.output))
+        if (
+          !saved ||
+          !parsed ||
+          saved.sessionID !== session.id ||
+          saved.messageID !== row.info.id ||
+          saved.revision !== parsed.goal.revision ||
+          saved.revision !== goal.revision ||
+          saved.digest !== identity(parsed.goal) ||
+          saved.digest !== identity(goal) ||
+          !isDeepStrictEqual(parsed.goal.routine, goal.routine)
+        )
+          return []
+        return [{ id: part.id, callID: part.callID, input: part.state.input, end: part.state.time.end }]
+      })
+    })
+    .sort((a, b) => a.end - b.end || a.id.localeCompare(b.id))
+  if (entries.length < 2 || entries.length > 128) return rows
+  const retired = new Map(
+    entries.flatMap((entry) => {
+      const latest = entries.findLast((candidate) => isDeepStrictEqual(candidate.input, entry.input))
+      return latest && latest.id !== entry.id ? [[entry.id, latest.callID] as const] : []
+    }),
+  )
+  if (!retired.size || !(yield* routine(tools, session))) return rows
+  return rows.map((row) => {
+    if (!row.parts.some((part) => retired.has(part.id))) return row
+    return {
+      ...row,
+      parts: row.parts.map((part) => {
+        const latest = retired.get(part.id)
+        if (!latest || part.type !== "tool" || part.state.status !== "completed") return part
+        return {
+          ...part,
+          state: {
+            ...part.state,
+            output: `[Superseded native get_goal snapshot for this same Goal dispatch. Use the newer get_goal result with callID ${latest} for current state and eligible evidence. The durable receipt is unchanged; this placeholder is not completion evidence.]`,
+          },
+        }
+      }),
+    }
+  })
+})
 
 export const native = Effect.fn("GoalToolGate.native")(function* (
   options: Readonly<Record<string, unknown>>,

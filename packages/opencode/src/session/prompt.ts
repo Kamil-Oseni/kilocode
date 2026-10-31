@@ -2037,9 +2037,10 @@ export const layer = Layer.effect(
           ])
           // kilocode_change start - inject only fresh in-memory desktop frames into this model request
           const frames = DesktopFrames.take(sessionID, lastUser.id)
-          let modelMsgs = yield* MessageV2.toModelMessagesEffect(DesktopFrames.inject(msgs, frames), model).pipe(
-            Effect.provideService(Database.Service, database),
-          )
+          let modelMsgs = yield* MessageV2.toModelMessagesEffect(
+            DesktopFrames.inject(yield* GoalGate.project(resolved, current, msgs), frames),
+            model,
+          ).pipe(Effect.provideService(Database.Service, database))
           // kilocode_change end
           const size = Buffer.byteLength(JSON.stringify(modelMsgs))
           if (size > REQUEST_PRUNE_BYTES) {
@@ -2053,9 +2054,10 @@ export const layer = Layer.effect(
             KiloSessionPrompt.injectEditorContext({ msgs, lastUser, sessionID, cache: envCache })
             msgs = KiloSessionPrompt.maybeStripHistoricalMedia(msgs)
             // kilocode_change start - reinject the same ephemeral frame only if payload pruning reloads history
-            modelMsgs = yield* MessageV2.toModelMessagesEffect(DesktopFrames.inject(msgs, frames), model).pipe(
-              Effect.provideService(Database.Service, database),
-            )
+            modelMsgs = yield* MessageV2.toModelMessagesEffect(
+              DesktopFrames.inject(yield* GoalGate.project(resolved, current, msgs), frames),
+              model,
+            ).pipe(Effect.provideService(Database.Service, database))
             // kilocode_change end
             const nextSize = Buffer.byteLength(JSON.stringify(modelMsgs))
             if (nextSize > REQUEST_PRUNE_BYTES)

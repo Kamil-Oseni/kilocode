@@ -81,11 +81,11 @@ const endpoint = Bun.serve({
     )
     const native = !state.routine
       ? undefined
-      : phase === 0
+      : phase === 0 || phase === 1
         ? { kind: "tool", name: "get_goal", arguments: {} }
-        : phase === 1
+        : phase === 2
           ? { kind: "tool", name: "read", arguments: { filePath: state.file } }
-          : phase === 2 && previous
+          : phase === 3 && previous
             ? {
                 kind: "tool",
                 name: "update_goal",
@@ -263,7 +263,7 @@ it.instance(
         dir: instance.directory,
       })
       const run = yield* runner.fire(worker.id)
-      yield* Deferred.await(done).pipe(Effect.timeout("20 seconds"))
+      yield* Deferred.await(done).pipe(Effect.timeout("45 seconds"))
       const session = yield* sessions.get(run.sessionID)
       const snapshot = yield* RayaTaskSnapshot.make({ storage }).find(run.id)
       expect(snapshot?.definition.access).toBe("brief")
@@ -290,21 +290,99 @@ it.instance(
       expect(goal?.audit?.requirements[0]?.passed).toBe(true)
       expect(RayaChief.routine(goal?.objective)).toBe(true)
       expect(goal?.objective).toContain("Report evidence for each criterion")
-      expect(requests).toHaveLength(4)
+      expect(requests).toHaveLength(5)
       expect(names(requests[0]?.format)).toEqual(["get_goal"])
       expect(names(requests[1]?.format)).toContain("read")
       expect(names(requests[1]?.format)).toContain("update_goal")
       for (const request of requests)
         for (const name of names(request.format)) expect(["get_goal", "update_goal", "read"]).toContain(name)
-      expect(requests[3]?.tools).toBeUndefined()
-      expect(requests[3]?.format).toBeUndefined()
+      expect(requests[4]?.tools).toBeUndefined()
+      expect(requests[4]?.format).toBeUndefined()
       const tools = rows.flatMap((row) => row.parts).filter((part) => part.type === "tool")
-      expect(tools.map((part) => part.tool)).toEqual(["get_goal", "read", "update_goal"])
+      expect(tools.map((part) => part.tool)).toEqual(["get_goal", "get_goal", "read", "update_goal"])
       expect(tools.every((part) => part.state.status === "completed")).toBe(true)
       const read = tools.find((part) => part.tool === "read")
       expect(read?.state.status === "completed" && read.state.metadata.rayaReadContent).toEqual(
         expect.objectContaining({ complete: true, text: "GATE_REAL_FILE" }),
       )
+      const nativeGoals = tools.filter((part) => part.tool === "get_goal")
+      const first = nativeGoals[0]
+      const latest = nativeGoals[1]
+      if (first?.state.status !== "completed" || latest?.state.status !== "completed")
+        throw new Error("Expected two native Goal observations")
+      const payload = JSON.stringify(requests[2])
+      expect(payload).toContain("Superseded native get_goal snapshot")
+      expect(payload).toContain(latest.callID)
+      expect(payload).toContain("eligibleEvidence")
+      expect(first.state.output).not.toContain("Superseded native")
+      expect(latest.state.output).not.toContain("Superseded native")
+      const durable = JSON.stringify(rows)
+      const active = Schema.decodeUnknownSync(Schema.Struct({ goal: RayaGoal.State }))(
+        JSON.parse(latest.state.output),
+      ).goal
+      if (!active.dispatch?.messageID) throw new Error("Expected actual native Goal dispatch")
+      yield* storage.replace(["raya", "goal", session.id], active)
+      const definition = yield* goalTools(goals).update.pipe(Effect.flatMap(Tool.init))
+      const check = yield* GoalGate.prepare(definition.jsonSchema, session.id, active.dispatch.messageID, () =>
+        sessions.messages({ sessionID: session.id }).pipe(
+          Effect.map((messages) => messages.findLast((row) => row.info.role === "user")?.info.id),
+          Effect.orDie,
+        ),
+      )
+      const catalog = GoalGate.bind({}, check, Effect.runPromise)
+      const projected = yield* GoalGate.project(catalog, session, rows)
+      const earlier = projected.flatMap((row) => row.parts).find((part) => part.id === first.id)
+      const current = projected.flatMap((row) => row.parts).find((part) => part.id === latest.id)
+      expect(earlier?.type === "tool" && earlier.state.status === "completed" && earlier.state.output).toContain(
+        "Superseded native get_goal snapshot",
+      )
+      expect(current).toEqual(latest)
+      expect(projected.flatMap((row) => row.parts).find((part) => part.id === read?.id)).toEqual(read)
+      expect(JSON.stringify(rows)).toBe(durable)
+      expect(JSON.stringify(yield* sessions.messages({ sessionID: session.id }))).toBe(durable)
+      expect(yield* GoalGate.project({}, session, rows)).toEqual(rows)
+      for (const input of [
+        { ...active, intent: "stale-intent" },
+        { ...active, createdAt: active.createdAt - 1 },
+      ]) {
+        yield* storage.replace(["raya", "goal", session.id], input)
+        expect(yield* GoalGate.project(catalog, session, rows)).toEqual(rows)
+      }
+      yield* storage.replace(["raya", "goal", session.id], active)
+      const foreign = rows.map((row) => ({
+        ...row,
+        parts: row.parts.map((part) =>
+          part.id === first.id && part.type === "tool" && part.state.status === "completed"
+            ? {
+                ...part,
+                state: {
+                  ...part.state,
+                  metadata: {
+                    ...part.state.metadata,
+                    [GoalGate.key]: {
+                      ...GoalGate.observation(active, session.id, part.messageID),
+                      sessionID: "foreign-session",
+                    },
+                  },
+                },
+              }
+            : part,
+        ),
+      }))
+      expect(yield* GoalGate.project(catalog, session, foreign)).toEqual(foreign)
+      const unmarked = rows.map((row) => ({
+        ...row,
+        parts: row.parts.map((part) => {
+          if (part.id !== first.id || part.type !== "tool" || part.state.status !== "completed") return part
+          const metadata = { ...part.state.metadata }
+          delete metadata[GoalGate.key]
+          return { ...part, state: { ...part.state, metadata } }
+        }),
+      }))
+      expect(yield* GoalGate.project(catalog, session, unmarked)).toEqual(unmarked)
+      for (const part of tools.filter((part) => part.tool !== "get_goal"))
+        expect(projected.flatMap((row) => row.parts).find((item) => item.id === part.id)).toEqual(part)
+      yield* storage.replace(["raya", "goal", session.id], goal)
       const answer = rows.findLast((row) => row.info.role === "assistant")
       expect(answer?.info.role === "assistant" && answer.info.finish).toBe("stop")
       expect(
@@ -346,7 +424,7 @@ it.instance(
       agent: { auto: { mode: "primary", steps: 8, permission: { "*": "allow" } } },
     },
   },
-  45000,
+  60000,
 )
 it.instance(
   "a host-prearmed goal owns its first real turn and releases accepted synthesis",

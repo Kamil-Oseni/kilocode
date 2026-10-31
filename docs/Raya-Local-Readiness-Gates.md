@@ -44,11 +44,13 @@ This earns the installed three-worker engine/literal component, not full busines
 
 Installed component checklist remains **3/9 (33.3%)** and overall readiness **unmeasured** because the full Routine, loaded chat/drafts/reopen, Memory, boot/reinstall and UI gates remain open. Earlier timer/cold acceptance on ebb and strict Code acceptance on ead retain those producers; neither model workflow was unnecessarily repeated on 057. Next is an explicit pinned-source Read criterion candidate, still unverified/uninstalled at this checkpoint. Voice remains deferred. No GUI, Home Assistant or other user app was controlled.
 
+Current gate summary for the installed build; earlier dated entries retain their original scope.
+
 | Gate | Status | Evidence or remaining work |
 |---|---|---|
-| Audited combined candidate | Verified for installed 057ce337a6 | Exact qualified CLI/helper/package; stock target zero and forced descendant cleanup retained separately. |
-| Normal installation preservation | Verified for installed 057ce337a6 | Preserved 6,772 saved files and unrelated registrations. Loaded populated recovery remains separate. |
-| Installed local General/tool turn | Pending | Current full proposal Read passed; loaded multi-turn chat, drafts/model and reopen remain unearned. |
+| Audited combined candidate | Verified for installed 1e18a91566 | Exact qualified CLI/helper/package; stock target zero and forced descendant cleanup retained separately. |
+| Normal installation preservation | Verified for installed 1e18a91566 | Preserved 6,890 saved files and unrelated registrations. Loaded populated recovery remains separate. |
+| Installed local General/tool turn | Pending | Installed 1e18 backend conversation-only recall passed with no new tools, children, Goals or Routine admissions and unchanged old messages. Loaded UI/drafts/model, large-chat behavior and loaded reopen remain pending. |
 | Strict installed Coder | Verified component on ead06c59b8 | Earlier local Code9B edit/native tests/final result retained without another model run. |
 | Installed Voice and permitted HA flow | Deferred by user | Voice is secondary; Home Assistant remains off. |
 | Scheduled routines | Partial; installed three-worker engine passed | Current three original stages/Goals/final reports, both handoffs/waits/wakes and five own-write/whole-Read files passed. Earlier ebb timers/cold retained. Business semantics, broader policies/budgets/Stop/recovery/UI remain open. |
@@ -150,9 +152,9 @@ No fresh installed model/content acceptance is claimed. The last actual 09e33b51
 
 | Gate | Status | Evidence or remaining work |
 |---|---|---|
-| Audited combined candidate | Verified for installed 1e18a91566 | Exact qualified CLI/helper/package; stock target zero and forced descendant cleanup retained separately. |
-| Normal installation preservation | Verified for installed 1e18a91566 | Preserved 6,890 saved files and unrelated registrations. Loaded populated recovery remains separate. |
-| Installed local General/tool turn | Pending | Installed 1e18 backend conversation-only recall passed with no new tools, children, Goals or Routine admissions and unchanged prior messages. Loaded UI, drafts/model, large-chat behavior and reopen remain unearned. |
+| Audited combined candidate | Verified for installed e123064b11 | Qualified installed CLI, helper and package match this source. Stock target success and owned descendant cleanup remain separately recorded. |
+| Normal installation preservation | Verified for installed e123064b11 | This installation preserved 6,089 saved files against its own baseline, 558 exact payloads, 561 CRC-checked entries and unrelated registrations. This is closed-file preservation, not loaded recovery. |
+| Installed local General/tool turn | Pending | Source checks preserve ordinary chat behavior. Current loaded UI, saved drafts/model and close/reopen still need installed acceptance. |
 | Strict installed Coder | Pending | Demonstrate scoped implementation and meaningful verification with the selected local Coder while preserving unrelated files. |
 | Installed Voice and permitted HA flow | Deferred by user | Voice is not the current priority. Home Assistant remains off. |
 | Scheduled routines | Pending | The earlier 09 manual three-worker native chain, verified handoffs and same-Run parent resumptions completed. Full business content and scheduling acceptance remain unearned. Current file-content checks have controlled native evidence, not a fresh full model workflow pass. |

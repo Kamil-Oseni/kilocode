@@ -140,7 +140,7 @@ The compatibility ready-list method and list preview still return complete lists
 
 ## Poll lifecycle
 
-The timer attempts a poll immediately, then waits 60 seconds after each completed or failed attempt. Poll failures and defects are logged and allow another attempt after that delay. Interruption stops the loop and is not treated as a retryable failure. This preserves the existing fixed-delay cadence; it does not provide a catch-up policy or compensate for time spent evaluating and starting work.
+The timer attempts a poll immediately, then waits 60 seconds after each completed or failed attempt. Poll failures and defects are logged and allow another attempt after that delay. Interruption stops the loop and is not treated as a retryable failure. This fixed-delay cadence does not compensate for time spent evaluating and starting work. Missed-occurrence handling is a separate saved policy, described below.
 
 Before a timer-selected routine creates a session, it acquires startup ownership and rereads its definition and history. Eligibility is checked against the original poll timestamp. A completed one-shot run, a future reschedule or a switch to manual/event scheduling prevents that selected timer start and releases the unused claim. Manual starts retain their separate behavior. This is a startup eligibility check, not durable occurrence identity or a transaction covering edits after the check.
 
@@ -154,7 +154,7 @@ Polling isolates calendar-evaluation failures per routine and skips that routine
 
 Calendar-day exclusion avoids converting every minute of a year for sparse schedules. It considers adjacent calendar dates around each UTC date before excluding a day; candidate minutes still receive full timezone conversion. Annual occurrences on either side of the UTC date boundary are covered by regression tests.
 
-Selected timer occurrences are now durably queued before session startup and reused after reopening, even outside the original polling window. Queue reservation, session linking and terminal reconciliation supplement existing startup claims. See [the queue contract](Raya-Routine-Queue.md) for ownership boundaries and recovery gaps. Missed wakeups that were never selected, event receipt deduplication and durable catch-up policy remain incomplete. This document does not promise execution while the backend is stopped or exactly-once execution across restarts.
+Selected timer occurrences are durably queued before session startup and reused after reopening, even outside the original polling window. Queue reservation, session linking and terminal reconciliation supplement existing startup claims. Explicit missed-run choices also record the selected latest occurrence or its skip with a durable cursor; they do not replay every missed time. See [the queue contract](Raya-Routine-Queue.md) for ownership boundaries and recovery gaps. Event receipt deduplication and full installed scheduling/recovery acceptance remain separate work. This document does not promise execution while the backend is stopped or exactly-once execution across restarts.
 
 ## Creation-screen role and template consent
 
@@ -212,9 +212,15 @@ Recurring schedules use their saved timezone. New cron schedules and edits must 
 
 ### Sleep and missed occurrences
 
-For recurring work that has not yet been selected into the execution queue, Raya admits only an occurrence less than one minute old. At exactly one minute late it skips that occurrence and looks forward. Waking after several days does not create a backlog of every missed recurrence. For example, a daily 09:00 routine can be selected at 09:00:59, but a first scheduler observation at 09:01:00 skips that day's run.
+The scheduling editor offers explicit choices for overlap and missed times. Existing routines keep their saved behavior until those choices are changed; omitted policies are not silently replaced with new defaults.
 
-One-time schedules remain due after their specified time until their occurrence is consumed, the schedule changes, or the routine is paused/removed. Existing overlap and recovery guards still apply; an overdue timestamp is not permission to create a duplicate run.
+For recurring work with no explicit missed-run policy, only an unselected occurrence less than one minute old is eligible. A daily 09:00 routine can be selected at 09:00:59, but a first observation at 09:01:00 skips that day's run. Setting only an overlap policy retains this recent-occurrence boundary. Neither case creates a backlog after several days offline.
+
+`missed: latest` ("Catch up one eligible occurrence") selects the latest missed recurrence after the saved schedule/cursor/consumed boundary. Older missed times are not replayed. `missed: skip` ("Skip missed times") records a durable skip when the selected occurrence is more than one minute old; exactly one minute old remains eligible in this explicit-policy path. Repeated polls reuse the queued occurrence or skip cursor instead of creating another occurrence for the same timestamp.
+
+Without an explicit skip policy, one-time schedules remain due after their specified time until their occurrence is consumed, the schedule changes, or the routine is paused/removed. An explicit `missed: skip` also applies the more-than-one-minute rule to an overdue one-time occurrence. Existing overlap and recovery guards still apply; an overdue timestamp is not permission to create a duplicate run.
+
+If previous work is still active, `overlap: skip` ("Skip this occurrence") records a skip for the selected timestamp. `overlap: queue` ("Keep one pending run") retains at most one pending scheduled occurrence until previous work finishes; later polls preserve that occurrence rather than replacing it with every intervening time. An omitted overlap policy retains the previous behavior of deferring selection while work is active. These choices never authorize concurrent runs of the same routine.
 
 A run already recorded as queued is a different case from an unselected missed occurrence. It retains its selected timestamp and can be admitted later after restart, subject to the current schedule version, enabled state, timezone review and ownership checks. Starting or uncertain runs require the existing recovery flow. This policy does not discard their evidence or automatically replay uncertain work.
 
@@ -226,4 +232,4 @@ A local time that does not exist during the spring clock change produces no occu
 
 ### Verification
 
-`test/kilocode/task-catchup.test.ts` exercises the actual next/due functions at the minute boundary, after multi-day gaps, in a saved non-UTC zone, and for consumed/paused one-time work. Existing `task-cron.test.ts` checks nonexistent and repeated local minutes, non-hour clock changes, and explicit zones across host environments. The existing scheduler test `a selected calendar occurrence survives reopening and is reserved before an uncertain session attempt` covers durable queued selection separately. Pending and completed validation outcomes are recorded in the implementation progress document; this file is not a claim that every deployed scheduler/migration scenario has been accepted.
+`test/kilocode/task-catchup.test.ts` exercises the actual legacy next/due functions at the minute boundary, after multi-day gaps, in a saved non-UTC zone, and for consumed/paused one-time work. `test/kilocode/task-policy.test.ts` covers explicit latest/skip selection, durable skip cursors, one retained pending occurrence while busy, and preservation of omitted policies. Existing `task-cron.test.ts` checks nonexistent and repeated local minutes, non-hour clock changes, and explicit zones across host environments. The existing scheduler test `a selected calendar occurrence survives reopening and is reserved before an uncertain session attempt` covers durable queued selection separately. Pending and completed validation outcomes are recorded in the implementation progress document; current installed two-period, chat-report and catch-up acceptance remain unearned. This file is not a claim that every deployed scheduler/migration scenario has been accepted.

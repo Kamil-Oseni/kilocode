@@ -158,6 +158,26 @@ function setup(
   })
 }
 
+// Keep physical authority IO on the captured live clock, independent of Goal test time.
+const timing = Effect.gen(function* () {
+  const raw = yield* Storage.Service
+  const clock = yield* Layer.build(TestClock.layer())
+  const use = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(clock))
+  const live = <A, E, R>(effect: Effect.Effect<A, E, R>) => use(TestClock.withLive(effect))
+  const storage: Storage.Interface = {
+    ...raw,
+    read: <T>(key: string[]) => live(raw.read<T>(key)),
+    readBounded: <T>(key: string[], limit: number) => live(raw.readBounded<T>(key, limit)),
+    list: (key) => live(raw.list(key)),
+    write: (key, value) => live(raw.write(key, value)),
+    create: (key, value) => live(raw.create(key, value)),
+    replace: (key, value) => live(raw.replace(key, value)),
+    remove: (key) => live(raw.remove(key)),
+    update: (key, change) => live(raw.update(key, change)),
+  }
+  return { storage, use }
+})
+
 describe("RayaGoal", () => {
   guide.live("completion rejects failed worker handoffs while preserving accepted assignment evidence", () =>
     Effect.gen(function* () {
@@ -5642,10 +5662,10 @@ describe("RayaGoal", () => {
     }),
   )
 
-  paging.effect("goal cleanup bounds namespace scans while directly validating requested records", () =>
+  paging.live("goal cleanup bounds namespace scans while directly validating requested records", () =>
     Effect.gen(function* () {
-      console.info("GOAL_CLEANUP_SCAN_PHASE", "layer-entered")
-      const storage = yield* Storage.Service
+      const clock = yield* timing
+      const storage = clock.storage
       let scans = 0
       const counted = {
         ...storage,
@@ -5660,9 +5680,7 @@ describe("RayaGoal", () => {
       const orphan = SessionID.make(`ses_cleanup_${crypto.randomUUID()}`)
       const requested = SessionID.make(`ses_cleanup_${crypto.randomUUID()}`)
       const now = Date.now()
-      console.info("GOAL_CLEANUP_SCAN_PHASE", "clock-setting")
-      yield* TestClock.setTime(now)
-      console.info("GOAL_CLEANUP_SCAN_PHASE", "clock-ready")
+      yield* clock.use(TestClock.setTime(now))
       const state = {
         objective: "Cleanup fixture",
         status: "active",
@@ -5675,44 +5693,37 @@ describe("RayaGoal", () => {
         Effect.forEach([good, orphan, requested], (id) => goals.clear(id), { discard: true }),
       )
       yield* storage.write(["raya", "goal", good], state)
-      console.info("GOAL_CLEANUP_SCAN_PHASE", "initial-read-starting")
-      for (const _ of Array.from({ length: 20 })) expect((yield* goals.get(good))?.status).toBe("active")
-      console.info("GOAL_CLEANUP_SCAN_PHASE", "repeated-reads-finished")
+      for (const _ of Array.from({ length: 20 })) expect((yield* clock.use(goals.get(good)))?.status).toBe("active")
       expect(scans).toBe(1)
       const expired = { ...state, status: "complete", updatedAt: now - 31 * 24 * 60 * 60 * 1000 }
       yield* storage.write(["raya", "goal", orphan], expired)
       yield* storage.write(["raya", "goal", requested], expired)
-      expect(yield* goals.get(requested)).toBeUndefined()
-      console.info("GOAL_CLEANUP_SCAN_PHASE", "requested-expiry-finished")
+      expect(yield* clock.use(goals.get(requested))).toBeUndefined()
       expect(scans).toBe(1)
-      yield* TestClock.adjust(59_999)
-      console.info("GOAL_CLEANUP_SCAN_PHASE", "interval-adjusted")
-      yield* goals.get(good)
+      yield* clock.use(TestClock.adjust(59_999))
+      yield* clock.use(goals.get(good))
       expect(scans).toBe(1)
       expect(yield* storage.read(["raya", "goal", orphan])).toEqual(expired)
-      yield* TestClock.adjust(1)
-      console.info("GOAL_CLEANUP_SCAN_PHASE", "interval-expired")
-      yield* goals.get(good)
+      yield* clock.use(TestClock.adjust(1))
+      yield* clock.use(goals.get(good))
       expect(scans).toBe(2)
       expect((yield* storage.list(["raya", "goal"])).some((key) => key.at(-1) === orphan)).toBe(false)
-      yield* TestClock.setTime(now - 1)
-      console.info("GOAL_CLEANUP_SCAN_PHASE", "clock-rolled-back")
-      yield* goals.get(good)
+      yield* clock.use(TestClock.setTime(now - 1))
+      yield* clock.use(goals.get(good))
       expect(scans).toBe(3)
-      yield* TestClock.setTime(now + 120_000)
-      console.info("GOAL_CLEANUP_SCAN_PHASE", "clock-forwarded")
-      yield* goals.get(good)
+      yield* clock.use(TestClock.setTime(now + 120_000))
+      yield* clock.use(goals.get(good))
       expect(scans).toBe(4)
       yield* storage.replace(["raya", "goal", good], { malformed: true })
-      expect(Exit.isFailure(yield* goals.get(good).pipe(Effect.exit))).toBe(true)
+      expect(Exit.isFailure(yield* clock.use(goals.get(good)).pipe(Effect.exit))).toBe(true)
       expect(scans).toBe(4)
-      console.info("GOAL_CLEANUP_SCAN_PHASE", "assertions-finished")
     }),
   )
 
-  paging.effect("goal cleanup releases its scan guard after interruption and storage failure", () =>
+  paging.live("goal cleanup releases its scan guard after interruption and storage failure", () =>
     Effect.gen(function* () {
-      const storage = yield* Storage.Service
+      const clock = yield* timing
+      const storage = clock.storage
       const entered = yield* Deferred.make<void>()
       const release = yield* Deferred.make<void>()
       let mode = "hold"
@@ -5735,7 +5746,7 @@ describe("RayaGoal", () => {
       const goals = setup(counted, () => [])
       const id = SessionID.make(`ses_cleanup_${crypto.randomUUID()}`)
       const now = Date.now()
-      yield* TestClock.setTime(now)
+      yield* clock.use(TestClock.setTime(now))
       yield* Effect.addFinalizer(() => goals.clear(id))
       yield* storage.write(["raya", "goal", id], {
         objective: "Direct read remains available",
@@ -5745,20 +5756,20 @@ describe("RayaGoal", () => {
         usage: { turns: 0, continuations: 0, toolCalls: 0 },
         progress: [],
       })
-      const pending = yield* goals.get(id).pipe(Effect.forkChild)
+      const pending = yield* clock.use(goals.get(id)).pipe(Effect.forkChild)
       yield* Deferred.await(entered)
-      expect((yield* goals.get(id))?.status).toBe("active")
+      expect((yield* clock.use(goals.get(id)))?.status).toBe("active")
       expect(scans).toBe(1)
       yield* Fiber.interrupt(pending)
       const stopped = yield* Fiber.await(pending)
       expect(Exit.isFailure(stopped) && Cause.hasInterrupts(stopped.cause)).toBe(true)
       mode = "fail"
-      expect((yield* goals.get(id))?.status).toBe("active")
+      expect((yield* clock.use(goals.get(id)))?.status).toBe("active")
       expect(scans).toBe(2)
       mode = "ready"
-      expect((yield* goals.get(id))?.status).toBe("active")
+      expect((yield* clock.use(goals.get(id)))?.status).toBe("active")
       expect(scans).toBe(3)
-      expect((yield* goals.get(id))?.status).toBe("active")
+      expect((yield* clock.use(goals.get(id)))?.status).toBe("active")
       expect(scans).toBe(3)
     }),
   )

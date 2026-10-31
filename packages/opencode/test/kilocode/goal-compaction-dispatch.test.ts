@@ -253,7 +253,9 @@ it.live(
               expect(usage(foreign, session, followed)).toEqual([])
               expect(usage(forged, session, followed)).toEqual([])
               const unmarked = rows.map((row) =>
-                row.info.id === second.summary.id ? { ...row, info: { ...row.info, summary: false } } : row,
+                row.info.role === "assistant" && row.info.id === second.summary.id
+                  ? { ...row, info: { ...row.info, summary: false } }
+                  : row,
               )
               expect(usage(unmarked, session, followed).map((row) => row.id)).toEqual([first.summary.id])
               expect(usage(rows, session, { ...followed, createdAt: Date.now() + 1 })).toEqual([])

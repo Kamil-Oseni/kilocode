@@ -1616,12 +1616,8 @@ export const Inbox: Component<{
     }, 400)
   }
 
-  createEffect(() => {
-    const target = props.correction
-    if (
-      !target ||
-      target.nonce === prepared ||
-      target.agentID !== props.agentID ||
+  const available = () =>
+    !(
       !connected() ||
       !ready() ||
       !mountReady() ||
@@ -1636,7 +1632,10 @@ export const Inbox: Component<{
       props.box?.owner !== owner ||
       props.box?.conversationID !== conversationID
     )
-      return
+
+  createEffect(() => {
+    const target = props.correction
+    if (!target || target.nonce === prepared || target.agentID !== props.agentID || !available()) return
     const next = correction(note(), target)
     prepared = target.nonce
     props.onCorrectionConsumed?.(target.nonce)

@@ -143,7 +143,7 @@ export function goalTools(
     "get_goal",
     Effect.succeed({
       description:
-        "Read the current persistent goal, status, usage, audit, blocked reason, continuation progress, and the exact IDs of completed tool calls eligible as completion evidence. For update_goal_plan, copy planUpdate.expectedIntent and planUpdate.expectedRevision exactly; the goal's revision is not the plan revision. Evidence comes from recorded goal inputs and delegated inputs linked by saved task metadata. Unrelated work in reused child sessions and older task results without input lineage are excluded. Task handoff reports and child summaries do not prove completion; cite the underlying work or verification results. Artifact metadata is a recorded snapshot, not a current check; completion rechecks recorded read/write/edit/patch revisions and rejects stale or unverifiable files, including recreated deleted paths. A fresh read can verify the current file without editing it; partial-read fingerprints do not prove full content review. Evidence is paged newest first (20 results); pass before=evidencePage.nextBefore to retrieve older results. Pagination does not verify artifact freshness or restrict what the audit may cite." +
+        "Read the current persistent goal, status, usage, audit, blocked reason, continuation progress, and the exact IDs of completed tool calls eligible as completion evidence. For update_goal_plan, copy planUpdate.expectedIntent and planUpdate.expectedRevision exactly; the goal's revision is not the plan revision. Evidence comes from recorded goal inputs and delegated inputs linked by saved task metadata. Unrelated work in reused child sessions and older task results without input lineage are excluded. Task handoff reports and child summaries do not prove completion; cite the underlying work or verification results. Artifact metadata is a recorded snapshot, not a current check; completion rechecks recorded read/write/edit/patch revisions and rejects stale or unverifiable files, including recreated deleted paths. A fresh read can verify the current file without editing it; partial-read fingerprints do not prove full content review. Evidence is paged newest first (20 results); pass before=evidencePage.nextBefore to retrieve older results. An empty or unavailable cursor returns the newest page with evidencePage.warning. Pagination does not verify artifact freshness or restrict what the audit may cite." +
         " " +
         literal,
       parameters: Schema.Struct({
@@ -187,12 +187,12 @@ export function goalTools(
             evidence.length > 0
           const inspect = Array.isArray(evidence) && evidence.length > 0 && goal.auditAttempt?.accepted !== false
           const resumed = correction.length || citing || inspect ? undefined : yield* recovery(ctx)
-          const offset = Array.isArray(evidence)
-            ? input.before === undefined
-              ? 0
-              : evidence.findIndex((item) => item.partID === input.before) + 1
-            : 0
-          const missing = input.before !== undefined && offset === 0 && Array.isArray(evidence)
+          const index =
+            Array.isArray(evidence) && input.before !== undefined
+              ? evidence.findIndex((item) => item.partID === input.before)
+              : -1
+          const offset = index + 1
+          const missing = input.before !== undefined && index === -1 && Array.isArray(evidence)
           const page = Array.isArray(evidence) ? evidence.slice(offset, offset + 20) : undefined
           const next = page?.at(-1)
           return {
@@ -203,19 +203,20 @@ export function goalTools(
                   planUpdate: { expectedIntent: goal.intent ?? "unset", expectedRevision: goal.plan?.revision ?? null },
                   goal,
                   criterionEvidence: hints,
-                  eligibleEvidence: missing
-                    ? {
-                        error:
-                          "Evidence cursor is unavailable for this goal. Omit before to refresh its newest evidence.",
-                      }
-                    : (page ?? evidence),
+                  eligibleEvidence: page ?? evidence,
                   evidencePage:
-                    page && !missing
+                    page
                       ? {
                           total: Array.isArray(evidence) ? evidence.length : 0,
                           returned: page.length,
                           nextBefore:
                             Array.isArray(evidence) && offset + page.length < evidence.length ? next?.partID : null,
+                          ...(missing
+                            ? {
+                                warning:
+                                  "Evidence cursor is empty or unavailable for this goal. Showing its newest evidence instead. Use nextBefore from this page for older evidence, or omit before for newest results. This display reset does not verify completion or change audit eligibility.",
+                              }
+                            : {}),
                         }
                       : undefined,
                   audit_correction: citing

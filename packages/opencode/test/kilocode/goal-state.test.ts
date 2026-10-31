@@ -240,8 +240,17 @@ describe("RayaGoal", () => {
           .map((part) => part.callID),
       )
       expect(third.evidencePage.nextBefore).toBeNull()
-      const foreign = JSON.parse((yield* def.execute({ before: "foreign-part" }, ctx)).output)
-      expect(foreign.eligibleEvidence.error).toContain("cursor is unavailable")
+      const newest = JSON.parse((yield* def.execute({}, ctx)).output)
+      for (const before of ["", "foreign-part"]) {
+        const fallback = JSON.parse((yield* def.execute({ before }, ctx)).output)
+        expect(fallback.eligibleEvidence).toEqual(newest.eligibleEvidence)
+        expect(fallback.eligibleEvidence).toHaveLength(20)
+        expect(fallback.evidencePage.nextBefore).toBe(newest.evidencePage.nextBefore)
+        expect(fallback.evidencePage.total).toBe(46)
+        expect(fallback.evidencePage.warning).toContain("Showing its newest evidence instead")
+        expect(yield* goals.get(id)).toEqual(armed)
+      }
+      expect(newest.evidencePage.warning).toBeUndefined()
       const denied = yield* goals
         .update(id, {
           status: "complete",

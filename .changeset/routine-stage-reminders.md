@@ -3,4 +3,4 @@
 "raya": patch
 ---
 
-Reinforce each routine worker's current task and file limits after reading source material.
+Reinforce routine workers' current tasks, file limits, dated sources and actual output features, and clarify how to wait for child work.

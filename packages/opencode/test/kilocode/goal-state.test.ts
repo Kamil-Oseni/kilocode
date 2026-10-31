@@ -42,12 +42,20 @@ import * as GoalChildren from "@/kilocode/goal/children"
 import * as GoalCharges from "@/kilocode/goal/charges"
 import { digest } from "@opencode-ai/core/kilocode/evidence-digest"
 import { ChiefBranches } from "@/kilocode/chief/branches"
+import { database, storage } from "./fixtures/effect-profile"
 
 const it = testEffect(LayerNode.compile(LayerNode.group([Storage.node, FSUtil.node, CrossSpawnSpawner.node, Git.node])))
 
 const guide = testEffect(
   LayerNode.compile(
     LayerNode.group([Storage.node, FSUtil.node, CrossSpawnSpawner.node, Git.node, Agent.node, Truncate.node]),
+  ),
+)
+
+const paging = testEffect(
+  LayerNode.compile(
+    LayerNode.group([Storage.node, FSUtil.node, CrossSpawnSpawner.node, Git.node, Agent.node, Truncate.node]),
+    [[Database.node, database], [Storage.node, storage]],
   ),
 )
 
@@ -195,7 +203,7 @@ describe("RayaGoal", () => {
     }),
   )
 
-  guide.instance("goal evidence pages retain older audit references while prioritizing fresh results", () =>
+  paging.instance("goal evidence pages retain older audit references while prioritizing fresh results", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service
       const id = SessionID.make("ses_evidence_pages")

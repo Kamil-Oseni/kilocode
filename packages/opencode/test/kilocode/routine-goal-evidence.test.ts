@@ -76,93 +76,86 @@ const it = testEffect(
 )
 const model = { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test") }
 
-it.live(
-  "native contracted Routine completion requires its actual completed exact child stage",
-  () =>
-    provideTmpdirInstance((directory) =>
-      Effect.gen(function* () {
-        for (const text of [
-          "Use native assign_organization_work without a contract.",
-          "Do not use native assign_organization_work with a version1 contract.",
-          "Explain how to use native assign_organization_work with a version1 contract.",
-          '"Use native assign_organization_work with a version1 contract."',
-          "```\nUse native assign_organization_work with a version1 contract.\n```",
-          "~~~\nUse native assign_organization_work with a version1 contract.\n~~~",
-          "\u201cExample:\nUse native assign_organization_work with a version1 contract.\u201d",
-          "> Use native assign_organization_work with a version1 contract.",
-          "Read-only status review. Use native assign_organization_work with a version1 contract.",
-        ])
-          expect(contractRequired(text)).toBe(false)
-        const sessions = yield* Session.Service
-        const storage = yield* Storage.Service
-        const database = yield* Database.Service
-        const fs = yield* FSUtil.Service
-        const tasks = RayaTask.make({ storage, database })
-        const goals = RayaGoal.make({ storage, database, sessions })
-        const starts = RayaTaskSnapshot.make({ storage })
-        const catalog = yield* (yield* ToolRegistry.Service).all()
-        const assign = catalog.find((tool) => tool.id === "assign_organization_work")
-        const delegate = catalog.find((tool) => tool.id === "delegate_work")
-        const update = catalog.find((tool) => tool.id === "update_goal")
-        const read = catalog.find((tool) => tool.id === "read")
-        const write = catalog.find((tool) => tool.id === "write")
-        if (!assign || !delegate || !update || !read || !write)
-          throw new Error("Actual native registry tools unavailable")
-        const source = path.join(directory, "source.txt")
-        const seed = "Actual approved source; no child completion is implied.\nDated input remains data.\n"
-        yield* fs.writeFileString(source, seed)
-        const pinned = {
-          kind: "source-read" as const,
-          path: source,
-          canonical: yield* fs.realPath(source),
-          sha256: createHash("sha256").update(seed).digest("hex"),
-          bytes: Buffer.byteLength(seed),
-        }
-        const criteria = [
-          {
-            id: "read",
-            description: "Read the approved source",
-            verification: "Cite the actual source Read receipt",
-            check: pinned,
-          },
-        ]
-        const busy = (agent: RayaTask.Agent) =>
-          Effect.gen(function* () {
-            const session = yield* sessions.create({ title: "Reserved fixture; no inference" })
-            return yield* tasks.record({
-              id: crypto.randomUUID(),
-              agentID: agent.id,
-              sessionID: session.id,
-              at: Date.now(),
-              status: "running",
-              trigger: { kind: "manual" },
-              scheduleVersion: 1,
+for (const mode of ["failed", "completed"])
+  it.live(
+    `native contracted Routine completion requires its actual completed exact child stage (${mode})`,
+    () =>
+      provideTmpdirInstance((directory) =>
+        Effect.gen(function* () {
+          for (const text of [
+            "Use native assign_organization_work without a contract.",
+            "Do not use native assign_organization_work with a version1 contract.",
+            "Explain how to use native assign_organization_work with a version1 contract.",
+            '"Use native assign_organization_work with a version1 contract."',
+            "```\nUse native assign_organization_work with a version1 contract.\n```",
+            "~~~\nUse native assign_organization_work with a version1 contract.\n~~~",
+            "\u201cExample:\nUse native assign_organization_work with a version1 contract.\u201d",
+            "> Use native assign_organization_work with a version1 contract.",
+            "Read-only status review. Use native assign_organization_work with a version1 contract.",
+          ])
+            expect(contractRequired(text)).toBe(false)
+          const sessions = yield* Session.Service
+          const storage = yield* Storage.Service
+          const database = yield* Database.Service
+          const fs = yield* FSUtil.Service
+          const tasks = RayaTask.make({ storage, database })
+          const goals = RayaGoal.make({ storage, database, sessions })
+          const starts = RayaTaskSnapshot.make({ storage })
+          const catalog = yield* (yield* ToolRegistry.Service).all()
+          const assign = catalog.find((tool) => tool.id === "assign_organization_work")
+          const delegate = catalog.find((tool) => tool.id === "delegate_work")
+          const update = catalog.find((tool) => tool.id === "update_goal")
+          const read = catalog.find((tool) => tool.id === "read")
+          const write = catalog.find((tool) => tool.id === "write")
+          if (!assign || !delegate || !update || !read || !write)
+            throw new Error("Actual native registry tools unavailable")
+          const source = path.join(directory, "source.txt")
+          const seed = "Actual approved source; no child completion is implied.\nDated input remains data.\n"
+          yield* fs.writeFileString(source, seed)
+          const pinned = {
+            kind: "source-read" as const,
+            path: source,
+            canonical: yield* fs.realPath(source),
+            sha256: createHash("sha256").update(seed).digest("hex"),
+            bytes: Buffer.byteLength(seed),
+          }
+          const criteria = [
+            {
+              id: "read",
+              description: "Read the approved source",
+              verification: "Cite the actual source Read receipt",
+              check: pinned,
+            },
+          ]
+          const busy = (agent: RayaTask.Agent) =>
+            Effect.gen(function* () {
+              const session = yield* sessions.create({ title: "Reserved fixture; no inference" })
+              return yield* tasks.record({
+                id: crypto.randomUUID(),
+                agentID: agent.id,
+                sessionID: session.id,
+                at: Date.now(),
+                status: "running",
+                trigger: { kind: "manual" },
+                scheduleVersion: 1,
+              })
             })
+          const context = (
+            sessionID: Session.Info["id"],
+            messageID: MessageID,
+            agent: string,
+            callID: string,
+          ): Tool.Context => ({
+            sessionID,
+            messageID,
+            callID,
+            agent,
+            abort: AbortSignal.any([]),
+            messages: [],
+            extra: {},
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
           })
-        const context = (
-          sessionID: Session.Info["id"],
-          messageID: MessageID,
-          agent: string,
-          callID: string,
-        ): Tool.Context => ({
-          sessionID,
-          messageID,
-          callID,
-          agent,
-          abort: AbortSignal.any([]),
-          messages: [],
-          extra: {},
-          metadata: () => Effect.void,
-          ask: () => Effect.void,
-        })
-        let count = 0
-        const trace = (mode: string, phase: string, id?: string, tool?: string) =>
-          Effect.sync(() => {
-            if (count++ >= 512) return
-            console.error("native source-read fixture phase", JSON.stringify({ mode, phase, id, tool }))
-          })
-        for (const mode of ["failed", "completed"]) {
-          yield* trace(mode, "setup")
           const output = path.join(directory, `${mode}-builder.md`)
           const note = path.join(directory, `${mode}-research.md`)
           const workers: RayaTask.Agent[] = []
@@ -195,7 +188,6 @@ it.live(
           const errands = RayaTaskDelegation.make(database, organizations.authorize, organizations.shares)
           const held = yield* busy(researcher)
           const reserved = yield* busy(builder)
-          yield* trace(mode, "reserved")
           const proposal = yield* JobContract.decode({
             version: 1,
             entry: "research",
@@ -397,7 +389,6 @@ it.live(
           }
           const invoke = (ctx: Tool.Context, tool: Tool.Def, input: Record<string, unknown>) =>
             Effect.gen(function* () {
-              yield* trace(mode, "start", ctx.callID, tool.id)
               const id = PartID.ascending()
               const start = Date.now()
               yield* sessions.updatePart({
@@ -410,10 +401,8 @@ it.live(
                 state: { status: "running", input, time: { start } },
               })
               const session = yield* sessions.get(ctx.sessionID)
-              yield* trace(mode, "execute", ctx.callID, tool.id)
               const result = yield* owned({ database, storage, sessions, session }, tool.execute(input, ctx))
               if (!result) throw new Error("Actual original tool execution was not admitted")
-              yield* trace(mode, "publish", ctx.callID, tool.id)
               yield* sessions.updatePart({
                 id,
                 sessionID: ctx.sessionID,
@@ -430,7 +419,6 @@ it.live(
                   time: { start, end: Date.now() },
                 },
               })
-              yield* trace(mode, "end", ctx.callID, tool.id)
               return result
             })
           const minimal = {
@@ -517,7 +505,6 @@ it.live(
           expect(reference.stageID).toBe("research")
           const open = (agent: RayaTask.Agent, row: Request, sender: RayaTask.Agent, held: RayaTask.Run) =>
             Effect.gen(function* () {
-              yield* trace(mode, "open", agent.id)
               yield* tasks.transition(held, { ...held, status: "complete" })
               const selected = yield* errands.take(agent.id)
               if (!selected?.childRunID || selected.id !== row.id) throw new Error("Exact declared stage not reserved")
@@ -611,7 +598,6 @@ it.live(
               const admission = { database, storage, sessions, session }
               expect(yield* continuation(admission)).toBe(true)
               expect(yield* owned(admission, Effect.succeed("actual-contract-body"))).toBe("actual-contract-body")
-              yield* trace(mode, "opened", agent.id)
               return { session, input, reply, goal, run, contract }
             })
           const root = yield* open(researcher, row, dispatch, held)
@@ -862,7 +848,7 @@ it.live(
             expect(failed.title).toBe("Completion audit rejected")
             expect((yield* goals.get(root.session.id))?.status).toBe("active")
             expect((yield* errands.get(assigned.id)).state).toBe("failed")
-            continue
+            return
           }
           yield* invoke(ctx(child, "wrong-child-write"), write, {
             filePath: output,
@@ -985,11 +971,10 @@ it.live(
           expect(accepted.metadata.status).toBe("complete")
           expect((yield* goals.get(root.session.id))?.auditAttempt?.accepted).toBe(true)
           expect((yield* errands.get(assigned.id)).state).toBe("completed")
-        }
-      }),
-    ),
-  120000,
-)
+        }),
+      ),
+    120000,
+  )
 
 it.live(
   "irreducible original owner context produces a native refusal without another model or assignment",

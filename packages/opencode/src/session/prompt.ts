@@ -36,6 +36,7 @@ import { RayaChief } from "@/kilocode/chief" // kilocode_change // raya_change -
 import { ResultContract } from "@/kilocode/chief/result-contract" // kilocode_change - private background result publication
 import { assigned, inspected, instruction as assignmentInstruction } from "@/kilocode/task/turn" // kilocode_change - inspect saved workers before assignment and acknowledge without repeating it
 import * as AssignmentRefusal from "@/kilocode/task/assignment-refusal" // kilocode_change - irreducible original owner refusal cannot become model progress
+import * as DirectRead from "@/kilocode/chief/direct-read" // kilocode_change - factual native acknowledgement for strict read-only turns
 import * as RoutineWait from "@/kilocode/goal/routine-wait" // kilocode_change - park authenticated child waits before compaction or another model step
 import { supplied as chatting, instruction as greeting } from "@/kilocode/chief/conversation" // kilocode_change - original greeting needs no workflow tools
 import { settled as recalled, acknowledged, acknowledgement, refused } from "@/kilocode/second-brain/turn" // kilocode_change - original personal-memory synthesis and preference acknowledgement
@@ -1695,6 +1696,7 @@ export const layer = Layer.effect(
         // kilocode_change end
         // kilocode_change start - carry local review command marker into LLM telemetry
         if (lastUser.agent === "auto" && (yield* AssignmentRefusal.finish(sessions, sessionID, lastUser.id))) break // kilocode_change - publish only the authenticated pre-admission refusal before model retry
+        if (lastUser.agent === "auto" && (yield* DirectRead.finish(sessions, sessionID, lastUser.id))) break // kilocode_change - only a completed current full Read can publish this native acknowledgement
         if (yield* RoutineWait.parked(storage, sessionID, lastUser.id)) break // kilocode_change - keep dependency waits ahead of compaction and another model call
         const telemetry =
           KiloSessionProcessor.extractReviewTelemetry(

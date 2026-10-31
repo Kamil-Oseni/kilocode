@@ -18,6 +18,8 @@ import { LSP } from "@/lsp/lsp"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import * as Truncate from "@/tool/truncate"
 import { ReadTool } from "@/tool/read"
+import * as DirectRead from "@/kilocode/chief/direct-read"
+import { InputReceipt } from "@opencode-ai/core/kilocode/input-receipt"
 import { RayaChief } from "@/kilocode/chief"
 import { inspectionFile } from "@/kilocode/task/request"
 import * as ReadArtifact from "@/kilocode/goal/read-artifact"
@@ -70,13 +72,14 @@ it.instance(
         model,
         time: { created: Date.now() },
       })
-      const source = yield* sessions.updatePart({
+      const body = yield* sessions.updatePart({
         id: PartID.ascending(),
         messageID: user.id,
         sessionID: session.id,
         type: "text",
         text: request,
       })
+      const source = yield* sessions.updatePart(InputReceipt.seal(user, [body])!)
       const assistant = yield* sessions.updateMessage({
         id: MessageID.ascending(),
         parentID: user.id,
@@ -139,7 +142,9 @@ it.instance(
       expect(read.output).toContain("qualified if partial or truncated")
       expect(read.output).toContain("Do not add dates, timestamps, lists, plan interpretations")
       expect(read.output).toContain("If the owner explicitly requested a summary, review or explanation")
-      expect(read.output).toContain("A declared future output establishes neither its current existence nor its absence.")
+      expect(read.output).toContain(
+        "A declared future output establishes neither its current existence nor its absence.",
+      )
       expect(read.output).toContain("Do not promise to execute the plan.")
       expect(read.output).toContain("</file-content-json>")
       expect(read.output.indexOf('<system-reminder source="raya-direct-read">')).toBeGreaterThan(
@@ -171,6 +176,7 @@ it.instance(
         },
       })
       expect(RayaChief.observed(yield* sessions.messages({ sessionID: session.id }), session, user.id)).toBe(true)
+      expect(yield* DirectRead.finish(sessions, session.id, user.id)).toBe(false) // Requested summary remains model-authored.
       yield* sessions.updatePart({ ...receipt, tool: "get_goal" })
       expect(RayaChief.observed(yield* sessions.messages({ sessionID: session.id }), session, user.id)).toBe(false)
       yield* sessions.updatePart({ ...receipt, state: { ...receipt.state, input: { filePath: other } } })
@@ -224,6 +230,90 @@ it.instance(
       const ordinary = yield* reader.execute({ filePath: other }, { ...ctx, agent: "general" })
       expect(ordinary.output).toContain("Unrelated confidential material")
       expect(ordinary.output).not.toContain('<system-reminder source="raya-direct-read">')
+
+      yield* fs.writeFileString(file, "First line.\nSecond line.\n")
+      const open = (limit?: number, suffix = "") =>
+        Effect.gen(function* () {
+          const request = `Read "${file}". Read-only. Do not start any workers.${suffix}`
+          const chat = yield* sessions.create({
+            metadata: { [RayaChief.requestKey]: request, [RayaChief.phaseKey]: "route" },
+          })
+          const owner = yield* sessions.updateMessage({
+            ...user,
+            id: MessageID.ascending(),
+            sessionID: chat.id,
+            time: { created: Date.now() },
+          })
+          const body = yield* sessions.updatePart({
+            ...source,
+            id: PartID.ascending(),
+            messageID: owner.id,
+            sessionID: chat.id,
+            text: request,
+            metadata: undefined,
+          })
+          const sealed = yield* sessions.updatePart(InputReceipt.seal(owner, [body])!)
+          const worker = yield* sessions.updateMessage({
+            ...assistant,
+            id: MessageID.ascending(),
+            parentID: owner.id,
+            sessionID: chat.id,
+            time: { created: Date.now() },
+          })
+          const call = { ...ctx, sessionID: chat.id, messageID: worker.id, callID: crypto.randomUUID() }
+          const input = { filePath: file, ...(limit === undefined ? {} : { limit }) }
+          const result = yield* reader.execute(input, call)
+          const receipt = yield* sessions.updatePart({
+            id: PartID.ascending(),
+            messageID: worker.id,
+            sessionID: chat.id,
+            type: "tool",
+            tool: "read",
+            callID: call.callID,
+            state: {
+              status: "completed",
+              input,
+              title: result.title,
+              output: result.output,
+              metadata: result.metadata,
+              time: { start: Date.now(), end: Date.now() },
+            },
+          })
+          yield* sessions.updateMessage({
+            ...worker,
+            finish: "tool-calls",
+            time: { ...worker.time, completed: Date.now() },
+          })
+          return { chat, owner, sealed, receipt }
+        })
+      const pure = yield* open()
+      expect(yield* DirectRead.finish(sessions, pure.chat.id, pure.owner.id)).toBe(true)
+      expect(yield* DirectRead.finish(sessions, pure.chat.id, pure.owner.id)).toBe(true)
+      const after = yield* sessions.messages({ sessionID: pure.chat.id })
+      const acknowledgements = after.flatMap((row) =>
+        row.parts.filter((part) => part.type === "text" && part.metadata?.["raya.direct-read.ack"]),
+      )
+      expect(acknowledgements).toHaveLength(1)
+      expect(acknowledgements[0]).toMatchObject({
+        type: "text",
+        text: "I have read the requested file; this turn did not start workers.",
+        metadata: {
+          "raya.direct-read.ack": { author: "native-host", readPartID: pure.receipt.id, userID: pure.owner.id },
+        },
+      })
+      expect(after.flatMap((row) => row.parts).find((part) => part.id === pure.receipt.id)).toEqual(pure.receipt)
+      const native = after.find((row) => row.parts.some((part) => part.id === acknowledgements[0]?.id))!
+      expect(native.info).toMatchObject({ role: "assistant", finish: "stop", cost: 0, tokens: { input: 0, output: 0 } })
+      yield* sessions.updatePart({ ...pure.sealed, text: pure.sealed.text + " Changed owner." })
+      expect(yield* DirectRead.finish(sessions, pure.chat.id, pure.owner.id)).toBe(false)
+      const summary = yield* open(undefined, " Summarize the content.")
+      expect(yield* DirectRead.finish(sessions, summary.chat.id, summary.owner.id)).toBe(false)
+      const partial = yield* open(1)
+      expect(partial.receipt.state.status).toBe("completed")
+      expect(yield* DirectRead.finish(sessions, partial.chat.id, partial.owner.id)).toBe(false)
+      const altered = yield* open()
+      yield* fs.writeFileString(file, "Changed after the full native Read.\n")
+      expect(yield* DirectRead.finish(sessions, altered.chat.id, altered.owner.id)).toBe(false)
     }),
   { config: { formatter: false, lsp: false, enabled_providers: [] } },
 )

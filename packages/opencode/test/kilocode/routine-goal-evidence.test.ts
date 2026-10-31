@@ -1,5 +1,6 @@
 import { expect } from "bun:test"
 import type { JSONSchema7 } from "@ai-sdk/provider"
+import { createHash } from "node:crypto"
 import path from "node:path"
 import { Effect, Exit, Schema } from "effect"
 import { eq } from "drizzle-orm"
@@ -25,6 +26,7 @@ import { Session } from "@/session/session"
 import { Storage } from "@/storage/storage"
 import { MessageID, PartID } from "@/session/schema"
 import { RayaGoal } from "@/kilocode/goal"
+import type { Criteria } from "@/kilocode/goal/criteria"
 import { compaction } from "@/kilocode/goal/turn"
 import { RayaTask } from "@/kilocode/task"
 import { RayaTaskDelegation, prompt, type Record as Request } from "@/kilocode/task/delegation"
@@ -107,9 +109,22 @@ it.live(
         if (!assign || !delegate || !update || !read || !write)
           throw new Error("Actual native registry tools unavailable")
         const source = path.join(directory, "source.txt")
-        yield* fs.writeFileString(source, "Actual approved source; no child completion is implied.\n")
+        const seed = "Actual approved source; no child completion is implied.\nDated input remains data.\n"
+        yield* fs.writeFileString(source, seed)
+        const pinned = {
+          kind: "source-read" as const,
+          path: source,
+          canonical: yield* fs.realPath(source),
+          sha256: createHash("sha256").update(seed).digest("hex"),
+          bytes: Buffer.byteLength(seed),
+        }
         const criteria = [
-          { id: "read", description: "Read the approved source", verification: "Cite the actual source Read receipt" },
+          {
+            id: "read",
+            description: "Read the approved source",
+            verification: "Cite the actual source Read receipt",
+            check: pinned,
+          },
         ]
         const busy = (agent: RayaTask.Agent) =>
           Effect.gen(function* () {
@@ -186,12 +201,14 @@ it.live(
                 criteria: [
                   ...criteria,
                   ...(mode === "completed"
-                    ? [{
-                        id: "file",
-                        description: "The own file contains the required literal",
-                        verification: "Read the exact final own output before passing its bytes to the child",
-                        check: { kind: "file-content", path: note, literals: ["Research step complete."] },
-                      }]
+                    ? [
+                        {
+                          id: "file",
+                          description: "The own file contains the required literal",
+                          verification: "Read the exact final own output before passing its bytes to the child",
+                          check: { kind: "file-content", path: note, literals: ["Research step complete."] },
+                        },
+                      ]
                     : []),
                   {
                     id: "child",
@@ -631,13 +648,21 @@ it.live(
           expect(reminder).toContain("grants no tools")
           if (mode === "completed") {
             expect(reminder).toContain("8192 UTF-8 bytes")
-            expect(reminder).toContain(`Saved literal check: ${JSON.stringify(entry.criteria.find((item) => item.id === "file")?.check)}`)
+            expect(reminder).toContain(
+              `Saved literal check: ${JSON.stringify(entry.criteria.find((item) => item.id === "file")?.check)}`,
+            )
           }
           expect(
-            yield* remind({
-              ...root.session,
-              metadata: { ...root.session.metadata, rayaRoutine: { ...marker, contract: { ...root.contract, stageID: "build" } } },
-            }, []),
+            yield* remind(
+              {
+                ...root.session,
+                metadata: {
+                  ...root.session.metadata,
+                  rayaRoutine: { ...marker, contract: { ...root.contract, stageID: "build" } },
+                },
+              },
+              [],
+            ),
           ).toBeUndefined()
           expect(yield* goals.get(root.session.id)).toEqual(before)
           yield* sessions.setMetadata({
@@ -657,8 +682,34 @@ it.live(
           yield* sessions.setMetadata({ sessionID: root.session.id, metadata: root.session.metadata ?? {} })
           const ctx = (target: typeof root, callID: string) =>
             context(target.session.id, target.reply.id, "generalist", callID)
+          const unchanged = yield* database.db.select().from(Delegation).all()
+          const refuse = (id: string) =>
+            Effect.gen(function* () {
+              const result = yield* invoke(ctx(root, id), delegate, { stageID: next.id })
+              expect(result.metadata.requestStatus).toBe("unresolved")
+              expect(result.output).toContain("pinned source")
+              expect(yield* database.db.select().from(Delegation).all()).toEqual(unchanged)
+            })
+          yield* refuse("missing-source-handoff")
+          if (mode === "completed") {
+            yield* invoke(ctx(root, "source-output-write"), write, {
+              filePath: note,
+              content: "Research step complete.\n",
+            })
+            yield* invoke(ctx(root, "source-output-read"), read, { filePath: note })
+            yield* refuse("output-only-source-handoff")
+          }
+          yield* invoke(context(chat.id, assistant.id, "auto", "foreign-source-read"), read, { filePath: source })
+          yield* refuse("foreign-source-handoff")
+          yield* invoke(ctx(root, "partial-source-read"), read, { filePath: source, limit: 1 })
+          yield* refuse("partial-source-handoff")
+          yield* fs.writeFileString(source, seed + "Unapproved change.\n")
+          yield* invoke(ctx(root, "changed-source-read"), read, { filePath: source })
+          yield* refuse("wrong-hash-source-handoff")
+          yield* fs.writeFileString(source, seed)
+          yield* refuse("stale-source-handoff")
           yield* invoke(ctx(root, "root-read"), read, { filePath: source })
-          const complete = (callID: string, criterion?: (typeof criteria)[number]) => ({
+          const complete = (callID: string, criterion?: Criteria[number]) => ({
             status: "complete",
             summary: "Actual source read verified",
             requirements: (criterion ? [criterion] : entry.criteria).map((item) => ({
@@ -667,7 +718,8 @@ it.live(
               passed: true,
               evidence: [
                 {
-                  callID: item.id === "child" ? "exact-child-stage" : item.id === "file" ? "restored-parent-read" : callID,
+                  callID:
+                    item.id === "child" ? "exact-child-stage" : item.id === "file" ? "restored-parent-read" : callID,
                   summary:
                     item.id === "child"
                       ? "Native required child returned its actual completed result"
@@ -737,7 +789,10 @@ it.live(
           if (mode === "completed") {
             expect(assigned.artifacts).toHaveLength(1)
             const pending = yield* database.db.select().from(Delegation).all()
-            yield* invoke(ctx(root, "changed-after-handoff"), write, { filePath: note, content: "Changed after admission.\n" })
+            yield* invoke(ctx(root, "changed-after-handoff"), write, {
+              filePath: note,
+              content: "Changed after admission.\n",
+            })
             const replay = yield* owned(
               { database, storage, sessions, session: root.session },
               RayaTaskRunner.make({ database, storage, sessions }).delegate(assigned),
@@ -882,7 +937,37 @@ it.live(
           expect(rejected?.auditAttempt?.reason).toContain("unavailable or changed")
           expect(rejected?.auditAttempt?.reason).not.toBe(prior?.auditAttempt?.reason)
           yield* sessions.setMetadata({ sessionID: child.session.id, metadata: saved ?? {} })
-          const accepted = yield* invoke(ctx(root, "complete-original-stage"), update, complete("root-read"))
+          for (const callID of ["restored-parent-read", "partial-source-read", "child-read"]) {
+            const result = yield* invoke(ctx(root, `reject-source-${callID}`), update, complete(callID))
+            expect(result.title).toBe("Completion audit rejected")
+            expect((yield* goals.get(root.session.id))?.status).toBe("active")
+          }
+          const absent = complete("root-read")
+          const empty = yield* invoke(ctx(root, "reject-missing-source"), update, {
+            ...absent,
+            requirements: absent.requirements.map((item) =>
+              item.criterionID === "read" ? { ...item, evidence: [] } : item,
+            ),
+          })
+          expect(empty.title).toBe("Completion audit rejected")
+          yield* fs.writeFileString(source, seed + "Changed after the approved Read.\n")
+          const outdated = yield* invoke(ctx(root, "reject-stale-source"), update, complete("root-read"))
+          expect(outdated.title).toBe("Completion audit rejected")
+          yield* invoke(ctx(root, "fresh-unapproved-source-read"), read, { filePath: source })
+          const changed = yield* invoke(
+            ctx(root, "reject-changed-source"),
+            update,
+            complete("fresh-unapproved-source-read"),
+          )
+          expect(changed.title).toBe("Completion audit rejected")
+          expect(changed.output).toContain("pinned source")
+          yield* fs.writeFileString(source, seed)
+          yield* invoke(ctx(root, "fresh-approved-source-read"), read, { filePath: source })
+          const accepted = yield* invoke(
+            ctx(root, "complete-original-stage"),
+            update,
+            complete("fresh-approved-source-read"),
+          )
           expect(accepted.metadata.status).toBe("complete")
           expect((yield* goals.get(root.session.id))?.auditAttempt?.accepted).toBe(true)
           expect((yield* errands.get(assigned.id)).state).toBe("completed")

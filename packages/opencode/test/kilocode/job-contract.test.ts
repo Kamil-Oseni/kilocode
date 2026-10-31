@@ -132,6 +132,51 @@ test("file-content checks retain exact literals and require their own declared s
     expect(() => decode(checked({ ...check, path: file }))).toThrow()
 })
 
+test("explicit source-read checks retain pinned inputs without widening output scope", () => {
+  const initial = proposal()
+  const check = {
+    kind: "source-read" as const,
+    path: path.resolve("approved-input.md"),
+    canonical: path.resolve("approved-input.md"),
+    sha256: "a".repeat(64),
+    bytes: 42,
+  }
+  const job = decode({
+    ...initial,
+    stages: initial.stages.map((stage, index) =>
+      index === 0 ? { ...stage, criteria: [{ ...stage.criteria[0], check }] } : stage,
+    ),
+  })
+  const entry = job.stages[0]
+  expect(entry.outputs).toEqual(initial.stages[0].outputs)
+  expect(entry.criteria[0].check).toEqual(check)
+  expect(Schema.decodeUnknownSync(GoalCriteria)(entry.criteria)[0].check).toEqual(check)
+  expect(decode(JSON.parse(JSON.stringify(canonical(job))))).toEqual(canonical(job))
+  expect(same(entry, { ...entry, criteria: [{ ...entry.criteria[0], check: { ...check, bytes: 43 } }] })).toBe(false)
+  expect(() =>
+    decode({
+      ...job,
+      stages: job.stages.map((stage, index) =>
+        index === 0
+          ? {
+              ...stage,
+              criteria: [
+                { ...entry.criteria[0], check: { ...check, path: stage.outputs[0], canonical: stage.outputs[0] } },
+              ],
+            }
+          : stage,
+      ),
+    }),
+  ).toThrow()
+  for (const value of [
+    { ...check, canonical: "relative.md" },
+    { ...check, sha256: "invalid" },
+    { ...check, bytes: 8193 },
+    { ...check, authorize: true },
+  ])
+    expect(() => Schema.decodeUnknownSync(Criteria)([{ ...entry.criteria[0], check: value }])).toThrow()
+})
+
 test("a declared job retains each stage's outputs and separate recipient criteria", () => {
   const job = decode(proposal())
   const sales = job.stages[2]

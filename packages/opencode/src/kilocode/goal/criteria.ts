@@ -35,11 +35,23 @@ export const FileContent = Schema.Struct({
     parseOptions: { onExcessProperty: "error" },
   })
 export type FileContent = typeof FileContent.Type
+export const SourceRead = Schema.Struct({
+  kind: Schema.Literal("source-read"),
+  path: Path,
+  canonical: Path,
+  sha256: Equality.fields.source.fields.sha256,
+  bytes: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(8192)),
+}).annotate({
+  description:
+    "Require this worker's fresh full native Read of an explicitly pinned source file for Goal completion and, in contracted Routines, before handoff. This grants no Read permission and proves acquisition of the saved bytes, not their factual accuracy.",
+  parseOptions: { onExcessProperty: "error" },
+})
+export type SourceRead = typeof SourceRead.Type
 const Criterion = Schema.Struct({
   id: Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/)),
   description: Text,
   verification: Text,
-  check: Schema.optional(FileContent),
+  check: Schema.optional(Schema.Union([FileContent, SourceRead])),
 })
 export const Criteria = Schema.Array(Criterion).check(Schema.isMinLength(1), Schema.isMaxLength(20))
 export type Criteria = typeof Criteria.Type
@@ -54,6 +66,7 @@ export const GoalCriteria = Schema.Array(
         Schema.Struct({ kind: Schema.Literal("command"), command: Text, directory: Path }),
         Equality,
         FileContent,
+        SourceRead,
       ]),
     ),
   }),

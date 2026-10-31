@@ -25,6 +25,7 @@ import { settle } from "./owned-jobs"
 import * as Artifact from "./artifact"
 import { equality } from "./byte-equality"
 import { verify as content } from "./file-content"
+import { verify as acquisition } from "./source-read"
 import { inspection } from "@opencode-ai/core/kilocode/evidence-inspection"
 import { digest } from "@opencode-ai/core/kilocode/evidence-digest"
 import * as Accounting from "./accounting"
@@ -1812,10 +1813,17 @@ export namespace RayaGoal {
           })
         if (
           check?.kind === "file-content" &&
-          !(yield* content(check, cited.filter((part) => part.sessionID === sessionID)))
+          !(yield* content(
+            check,
+            cited.filter((part) => part.sessionID === sessionID),
+          ))
         )
           return yield* new AuditError({
             message: `Criterion ${requirement.criterionID} requires a current full Read of ${JSON.stringify(check.path)} containing every saved exact literal: ${JSON.stringify(check.literals)}. The checked file must fit within 8192 UTF-8 bytes. Check the actual file: add any absent saved literals within the permitted work and shorten it if it exceeds the byte limit. Repeated reads of unchanged invalid content cannot satisfy this check. After correcting the file, read it in full again and cite that successful Read callID in this criterion's evidence array. If its contents already meet the check, obtain and cite a fresh full Read instead of changing valid content. Partial reads and stale or unavailable content cannot pass. Do not change the saved criterion or claim this check proves requirements beyond these literals.`,
+          })
+        if (check?.kind === "source-read" && !(yield* acquisition(check, cited, sessionID)))
+          return yield* new AuditError({
+            message: `Criterion ${requirement.criterionID} requires this worker's fresh full native Read of the pinned source ${JSON.stringify(check.path)} (canonical ${JSON.stringify(check.canonical)}, SHA-256 ${check.sha256}, ${check.bytes} bytes). Cite that eligible Read for this criterion. Own output reads, foreign worker reads, partial reads, stale bytes and a different source digest do not satisfy source acquisition. This check grants no Read permission and does not prove factual accuracy. Preserve the pinned check; do not rewrite the approved source to satisfy it.`,
           })
         verified.push({ ...requirement, evidence: proof })
       }

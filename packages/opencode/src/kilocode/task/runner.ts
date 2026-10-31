@@ -75,6 +75,7 @@ import * as Contract from "./job-contract-store"
 import { same as staged } from "./job-contract"
 import * as Artifact from "@/kilocode/goal/artifact"
 import { verify as content } from "@/kilocode/goal/file-content"
+import { verify as acquisition } from "@/kilocode/goal/source-read"
 
 const WAIT = "waiting on you"
 const failed = (run: RayaTask.Run) => !!run.outcome?.delivery && run.outcome.delivery.status !== "passed"
@@ -975,7 +976,7 @@ export namespace RayaTaskRunner {
             item.output.criteria
               .map(
                 (criterion) =>
-                  `[${criterion.id}] ${criterion.description}\nVerification: ${criterion.verification}${criterion.check ? `\nExact file-content check: ${JSON.stringify(criterion.check)}` : ""}`,
+                  `[${criterion.id}] ${criterion.description}\nVerification: ${criterion.verification}${criterion.check ? `\nExact ${criterion.check.kind} check: ${JSON.stringify(criterion.check)}` : ""}`,
               )
               .join("\n\n"),
           "Report evidence for each criterion by its ID in the update_goal completion audit: include exactly one requirement per saved criterion, set criterionID to its ID and preserve its description as the requirement text. Preserve any final-response format specified in the worker's objective after accepted completion; do not replace that response with a report about the audit. Do not claim completion when a required criterion is unmet or unverified. If verification requires a person's judgment, request that review. This output contract does not grant permission to send external messages or modify files.",
@@ -1870,7 +1871,10 @@ export namespace RayaTaskRunner {
         const artifact = input.artifacts?.find((item) => Files.includes([item.path], check.path))
         return artifact ? [{ criterion, check, artifact }] : []
       })
-      if (!checks.length) return
+      const sources = view.stage.criteria.flatMap((criterion) =>
+        criterion.check?.kind === "source-read" ? [{ criterion, check: criterion.check }] : [],
+      )
+      if (!checks.length && !sources.length) return
       const eligible = (yield* goals.evidence(parent.sessionID)).filter(
         (part) => part.tool === "read" && part.sessionID === parent.sessionID,
       )
@@ -1896,6 +1900,14 @@ export namespace RayaTaskRunner {
             })
           : [],
       )
+      for (const item of sources) {
+        if (!(yield* acquisition(item.check, reads, parent.sessionID)))
+          return yield* new Contract.Invalid({
+            message:
+              `Cannot hand off before reading the pinned source ${JSON.stringify(item.check.path)}. [${item.criterion.id}] ${item.criterion.description} ` +
+              `This worker needs a fresh full native Read matching canonical ${JSON.stringify(item.check.canonical)}, SHA-256 ${item.check.sha256}, ${item.check.bytes} bytes. Own output reads, foreign worker reads, partial reads and stale or different bytes cannot satisfy this source-read check. It grants no Read permission and does not prove factual accuracy. Preserve the approved source and retry this same handoff after obtaining the actual eligible Read.`,
+          })
+      }
       for (const item of checks) {
         const parts = reads.filter((part) => {
           const revisions = Artifact.entries(part.state.metadata["rayaRevision"])

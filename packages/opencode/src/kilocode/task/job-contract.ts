@@ -64,11 +64,22 @@ export const Proposal = Schema.Struct({
       if (
         stage.criteria.some(
           (item) =>
-            item.check &&
+            item.check?.kind === "file-content" &&
             (!Schema.is(Files.Outputs)([item.check.path]) || !Files.includes(stage.outputs, item.check.path)),
         )
       )
         return `File-content checks must name this contract stage's exact declared outputs: ${stage.id}.`
+      if (
+        stage.criteria.some(
+          (item) =>
+            item.check?.kind === "source-read" &&
+            (!Schema.is(Files.Outputs)([item.check.path]) ||
+              !Schema.is(Files.Outputs)([item.check.canonical]) ||
+              Files.includes(stage.outputs, item.check.path) ||
+              Files.includes(stage.outputs, item.check.canonical)),
+        )
+      )
+        return `Source-read checks must pin unambiguous absolute input paths outside this stage's outputs: ${stage.id}.`
       if (new Set(stage.criteria.map((item) => item.id)).size !== stage.criteria.length)
         return `Criterion IDs must be unique in contract stage ${stage.id}.`
       if (new Set(stage.next.map((item) => item.stageID)).size !== stage.next.length)

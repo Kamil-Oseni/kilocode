@@ -155,7 +155,14 @@ it.live(
           metadata: () => Effect.void,
           ask: () => Effect.void,
         })
+        let count = 0
+        const trace = (mode: string, phase: string, id?: string, tool?: string) =>
+          Effect.sync(() => {
+            if (count++ >= 512) return
+            console.error("native source-read fixture phase", JSON.stringify({ mode, phase, id, tool }))
+          })
         for (const mode of ["failed", "completed"]) {
+          yield* trace(mode, "setup")
           const output = path.join(directory, `${mode}-builder.md`)
           const note = path.join(directory, `${mode}-research.md`)
           const workers: RayaTask.Agent[] = []
@@ -188,6 +195,7 @@ it.live(
           const errands = RayaTaskDelegation.make(database, organizations.authorize, organizations.shares)
           const held = yield* busy(researcher)
           const reserved = yield* busy(builder)
+          yield* trace(mode, "reserved")
           const proposal = yield* JobContract.decode({
             version: 1,
             entry: "research",
@@ -389,6 +397,7 @@ it.live(
           }
           const invoke = (ctx: Tool.Context, tool: Tool.Def, input: Record<string, unknown>) =>
             Effect.gen(function* () {
+              yield* trace(mode, "start", ctx.callID, tool.id)
               const id = PartID.ascending()
               const start = Date.now()
               yield* sessions.updatePart({
@@ -401,8 +410,10 @@ it.live(
                 state: { status: "running", input, time: { start } },
               })
               const session = yield* sessions.get(ctx.sessionID)
+              yield* trace(mode, "execute", ctx.callID, tool.id)
               const result = yield* owned({ database, storage, sessions, session }, tool.execute(input, ctx))
               if (!result) throw new Error("Actual original tool execution was not admitted")
+              yield* trace(mode, "publish", ctx.callID, tool.id)
               yield* sessions.updatePart({
                 id,
                 sessionID: ctx.sessionID,
@@ -419,6 +430,7 @@ it.live(
                   time: { start, end: Date.now() },
                 },
               })
+              yield* trace(mode, "end", ctx.callID, tool.id)
               return result
             })
           const minimal = {
@@ -505,6 +517,7 @@ it.live(
           expect(reference.stageID).toBe("research")
           const open = (agent: RayaTask.Agent, row: Request, sender: RayaTask.Agent, held: RayaTask.Run) =>
             Effect.gen(function* () {
+              yield* trace(mode, "open", agent.id)
               yield* tasks.transition(held, { ...held, status: "complete" })
               const selected = yield* errands.take(agent.id)
               if (!selected?.childRunID || selected.id !== row.id) throw new Error("Exact declared stage not reserved")
@@ -598,6 +611,7 @@ it.live(
               const admission = { database, storage, sessions, session }
               expect(yield* continuation(admission)).toBe(true)
               expect(yield* owned(admission, Effect.succeed("actual-contract-body"))).toBe("actual-contract-body")
+              yield* trace(mode, "opened", agent.id)
               return { session, input, reply, goal, run, contract }
             })
           const root = yield* open(researcher, row, dispatch, held)

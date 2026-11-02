@@ -97,6 +97,34 @@ export const WindowsRequest = Schema.Struct({
   target: Schema.optional(SelectedWindowTarget),
 })
 
+export const BackgroundSnapshotRequest = Schema.Struct({
+  ...Base,
+  operation: Schema.Literal("background_snapshot"),
+  target: SelectedWindowTarget,
+  authorization: Schema.optional(Authorization),
+})
+
+export const BackgroundRole = Schema.Literals(["button", "textfield", "checkbox", "menuitem", "combobox", "link"])
+const BackgroundName = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(512))
+const BackgroundValue = Schema.String.check(Schema.isMaxLength(16_384))
+const BackgroundBase = {
+  ...Base,
+  operation: Schema.Literal("background_action"),
+  target: SelectedWindowTarget,
+  authorization: Schema.optional(Authorization),
+  sensitive: ClassifiedSensitive,
+  name: BackgroundName,
+}
+export const BackgroundActionRequest = Schema.Union([
+  Schema.Struct({ ...BackgroundBase, action: Schema.Literal("click"), role: BackgroundRole }),
+  Schema.Struct({
+    ...BackgroundBase,
+    action: Schema.Literal("set_value"),
+    role: Schema.Literal("textfield"),
+    value: BackgroundValue,
+  }),
+])
+
 export const WatchRequest = Schema.Struct({
   ...Base,
   operation: Schema.Literal("watch"),
@@ -317,6 +345,8 @@ export const SequenceRequest = Schema.Struct({
 
 export const Request = Schema.Union([
   AuthorizeRequest,
+  BackgroundSnapshotRequest,
+  BackgroundActionRequest,
   ObserveRequest,
   WindowsRequest,
   WatchRequest,
@@ -409,6 +439,18 @@ export const WindowsResult = Schema.Struct({
   receipt: Receipt,
 })
 
+export const BackgroundSnapshotResult = Schema.Struct({
+  operation: Schema.Literal("background_snapshot"),
+  output: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(2_097_152)),
+  receipt: Receipt,
+})
+
+export const BackgroundActionResult = Schema.Struct({
+  operation: Schema.Literal("background_action"),
+  output: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(2_097_152)),
+  receipt: Receipt,
+})
+
 const WatchFrameBase = {
   width: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
   height: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
@@ -498,6 +540,8 @@ export const SequenceResult = Schema.Struct({
 
 export const Result = Schema.Union([
   AuthorizeResult,
+  BackgroundSnapshotResult,
+  BackgroundActionResult,
   ObserveResult,
   WindowsResult,
   WatchResult,

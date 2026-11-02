@@ -70,7 +70,13 @@ Resolve the exact authorized native HWND into Vercel's `w-<decimal HWND>` identi
 
 The host must revalidate the active grant and sensitive category after resolving that fresh control and before dispatch. It must serialize mutations per canonical window, never activate a window or fall back to physical input, retain any delivery receipt if readback fails, and never automatically replay a delivered action. Cancellation must stop the owned command and independently end its Vercel session; cleanup failure remains visible. An action whose delivery is uncertain must be reported as uncertain, not as safely cancelled before delivery.
 
-This is the implementation decision, not an implemented adapter. The focused acceptance is one selected disposable app window, a real saved field result, observe-only and wrong-window refusals, and cancellation/cleanup through the actual worker route. Do not open the fixture while the user's main-screen restriction is active. No broad model campaign is required.
+The native adapter is now implemented in source, including generated SDK variants and the extension service connection. It records durable dispatch reservation/settlement evidence, revalidates selected-window grants, preserves sensitive prompts, and scrubs application content from retained action receipts. The separately maintained TaskAuthority change is still required in the combined build; this adapter does not enable the standalone plugin for computer children.
+
+Root SDK generation completed naturally with exit 0 in 39.938 seconds. Scoped CLI/transitive typing, extension/transitive typing, CLI syntax lint and the extension's actual ESLint checks passed. The guarded check batch ended naturally with joined streams and an empty owned process family; minimum available RAM was 9.97 GiB. Receipts: `.tmp/new-pc/native-background-sdk-20261102.json` and `native-background-checks-20261102-v5.json`.
+
+One focused bridge regression passed four scenarios with 26 assertions: an approved sensitive prompt, a wrong target, a replaced identity, and observe-only mutation refusal. It uses the real lease store and existing isolated driver/provider fixtures, and checks that native focus, physical action and foreground capture are unused. It is a grant/routing regression, not real app or installed-worker acceptance. Receipt: `.tmp/new-pc/native-background-regression-20261102.json`.
+
+Packaging and actual worker acceptance remain pending. The focused acceptance is one selected disposable app window, a real saved field result, observe-only and wrong-window refusals, and cancellation/cleanup through the actual worker route. Do not open the fixture while the user's main-screen restriction is active. No broad model campaign is required.
 
 For global installation, copy the reviewed plugin entry to `~/.config/kilo/plugins/raya-agent-desktop.ts` and its implementation to `~/.config/kilo/skills/raya-agent-desktop/tool.ts`. Update that skill's `SKILL.md` together with those two files, preserving the existing pinned `install.json` and versioned binary. Save any prior files before replacement. Do this only after active normal-profile jobs have closed; existing backends need a reload before discovery. Do not silently widen a worker's allowed tools.
 
@@ -90,7 +96,7 @@ Deploy only after the build chat releases preservation and all owned normal-prof
 
 The private setup and probes above did not change global dependency files, plugin entry or permissions. The build chat subsequently applied the global deployment with create-new dependency copies and published the plugin entry last; the recipe remains here for recovery or a new installation. Installed discovery does not establish routine-worker availability.
 
-Run one authorized background app task through Raya's actual worker routing and verify saved output, cancellation and cleanup. Then route native desktop requests through a provider adapter if the CLI path proves useful. Do not claim the component checks prove full routine completion or that this replaces the native desktop UI.
+After installing the combined native adapter, run one authorized background app task through Raya's actual worker routing and verify saved output, cancellation and cleanup. Do not claim the component checks prove full routine completion or that this replaces the native desktop UI.
 
 No broad test suite or extension rebuild is required for this skill-only installation. Existing sessions may need a fresh Raya conversation/backend reload to discover newly installed global skills.
 

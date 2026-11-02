@@ -12,6 +12,8 @@ import type { SSEPayload } from "../cli-backend/sdk-sse-adapter"
 import { DesktopOutcomeError, type DesktopNativeDispatch, type DesktopSession } from "./desktop-session"
 import type { DesktopPlannedAction } from "./desktop-sequence"
 import { NativeInputPreflightError } from "./desktop-input-host"
+import { DesktopBackgroundHost } from "./desktop-background-host"
+import { classify } from "./desktop-sensitive"
 
 export interface DesktopConnection {
   onEvent(listener: (event: SSEPayload, directory?: string) => void): () => void
@@ -72,15 +74,38 @@ type CaptureRequest = Extract<DesktopRequest, { operation: "observe" | "watch" }
 type WindowsRequest = Extract<DesktopRequest, { operation: "windows" }>
 type AuthorizeRequest = Extract<DesktopRequest, { operation: "authorize" }>
 type AuthorizeResult = Extract<DesktopResult, { operation: "authorize" }>
-type PassiveRequest = CaptureRequest | WindowsRequest | AuthorizeRequest
-type ActionRequest = Exclude<DesktopRequest, PassiveRequest>
-type ActionResult = Exclude<DesktopResult, { operation: "authorize" | "observe" | "watch" | "windows" }>
+type BackgroundRequest = Extract<DesktopRequest, { operation: "background_snapshot" | "background_action" }>
+type PassiveRequest =
+  | CaptureRequest
+  | WindowsRequest
+  | AuthorizeRequest
+  | Extract<BackgroundRequest, { operation: "background_snapshot" }>
+type ActionRequest = Exclude<DesktopRequest, PassiveRequest | BackgroundRequest>
+type ActionResult = Exclude<
+  DesktopResult,
+  { operation: "authorize" | "observe" | "watch" | "windows" | "background_snapshot" }
+>
 type Frame = Awaited<ReturnType<DesktopSession["observe"]>>
 type Authorization = Exclude<DesktopRequest, { operation: "authorize" | "sequence" }>["authorization"]
 
 const journal = "raya.computerUse.desktop.actionReceipts.v1"
-const actions = new Set(["focus", "move", "drag", "click", "type", "key", "scroll", "sequence"])
-const passive = new Set(["authorize", "observe", "watch", "windows"])
+const actions = new Set(["focus", "move", "drag", "click", "type", "key", "scroll", "sequence", "background_action"])
+const passive = new Set(["authorize", "observe", "watch", "windows", "background_snapshot"])
+
+function semantic(request: BackgroundRequest, target: { windowID: string; identity: string }) {
+  if (request.operation === "background_snapshot") return { action: "snapshot" as const, target }
+  if (request.action === "click") return { action: "click" as const, target, role: request.role, name: request.name }
+  return { action: "set_value" as const, target, role: "textfield" as const, name: request.name, value: request.value }
+}
+
+function outcome(result: Awaited<ReturnType<DesktopBackgroundHost["execute"]>>, snapshot: boolean) {
+  const action = result.result?.action as { data?: { disposition?: { delivery?: string } } } | undefined
+  const delivery = action?.data?.disposition?.delivery
+  return {
+    confirmed: result.ok && (snapshot || delivery === "delivered_verified"),
+    accepted: delivery === "delivered_verified" || delivery === "delivered_unverified" ? 1 : 0,
+  }
+}
 
 function nativeHash(salt: string, identity: DesktopNativeDispatch["identity"]) {
   if (
@@ -105,6 +130,8 @@ function effect(request: DesktopRequest) {
 
 function ground(request: DesktopRequest) {
   if (passive.has(request.operation)) return {}
+  if (request.operation === "background_action")
+    return { target: { surface: "desktop" as const, windowID: request.target.windowID } }
   const action = request as ActionRequest
   return {
     target: { surface: "desktop" as const, windowID: action.windowID },
@@ -188,6 +215,7 @@ export class DesktopBridge {
     private readonly store?: DesktopReceiptStore,
     private readonly authorize?: (request: AuthorizeRequest) => Promise<AuthorizeResult>,
     private readonly validate?: (request: AuthorizeRequest) => AuthorizeResult,
+    private readonly background?: Pick<DesktopBackgroundHost, "execute">,
   ) {
     this.restore()
     this.offEvent = connection.onEvent((event, directory) => this.event(event, directory))
@@ -526,9 +554,88 @@ export class DesktopBridge {
     const decision = this.validate?.(authorization(request))
     enforce(decision, request.authorization)
     if (request.operation === "windows") return this.windows(request, startedAt, decision)
+    if (request.operation === "background_snapshot" || request.operation === "background_action")
+      return this.backgroundRequest(request, startedAt, signal, onDispatch, onNative, decision)
     if (request.operation === "observe" || request.operation === "watch")
       return this.observe(request, startedAt, signal, decision)
     return this.interact(request, startedAt, onDispatch, onNative)
+  }
+
+  private async backgroundRequest(
+    request: BackgroundRequest,
+    startedAt: number,
+    signal: AbortSignal,
+    onDispatch: () => void,
+    onNative: (event: DesktopNativeDispatch) => Promise<void>,
+    decision?: AuthorizeResult,
+  ): Promise<DesktopResult> {
+    if (!this.background) throw new Error("Background desktop provider is unavailable")
+    const window = request.target.windowID
+    const identity = decision?.identity
+    if (!decision || decision.decision === "deny" || decision.windowID !== window || !identity)
+      throw new DesktopAuthorizationRefusal("Background desktop needs an active selected-window grant")
+    const target = { windowID: window, identity }
+    let observation: string | undefined
+    let reserved = false
+    const native = { session: request.sessionID, request: request.id, sequence: 1 }
+    const result = await this.background.execute(
+      semantic(request, target),
+      {
+        verify: async (target, owner) => {
+          await this.session.verify(target.windowID, target.identity)
+          const inventory = await this.session.windows()
+          const actual = inventory.windows.find((item) => item.windowID === target.windowID)
+          if (!actual || actual.identity !== target.identity || (owner && owner.pid !== actual.processID))
+            throw new Error("Background window owner changed or differs from the native grant")
+          observation = inventory.observation.id
+        },
+        authorize: async (action, control) => {
+          const sensitive =
+            request.operation === "background_action" && action !== "observe" ? request.sensitive : false
+          const expected = control ? classify(`${control.name} ${control.automationID ?? ""}`) : []
+          if (expected.length > 1 || (expected.length === 1 && sensitive !== expected[0]))
+            throw new DesktopAuthorizationRefusal("Observed background control needs its matching sensitive category")
+          const current = this.validate?.({ ...authorization(request), action, sensitive })
+          enforce(current, request.authorization)
+          if (!current || current.decision === "deny" || current.windowID !== window || current.identity !== identity)
+            throw new DesktopAuthorizationRefusal("Background desktop grant is no longer active for this window")
+        },
+        dispatch: async () => {
+          await onNative({ phase: "reserved", identity: native })
+          reserved = true
+          await this.session.verify(window, identity)
+          signal.throwIfAborted()
+          onDispatch()
+        },
+      },
+      signal,
+    )
+    const proof = outcome(result, request.operation === "background_snapshot")
+    if (reserved)
+      await onNative({
+        phase: "settled",
+        identity: native,
+        outcome: result.attempted ? (proof.confirmed ? "confirmed" : "unknown") : "refused",
+        code: "background_semantic",
+        attempted: result.attempted ? 1 : 0,
+        accepted: proof.accepted,
+      })
+    if (!result.ok && !result.attempted)
+      throw new DesktopAuthorizationRefusal(result.failure ?? "Background desktop refused before action delivery")
+    return {
+      operation: request.operation,
+      output: JSON.stringify(result),
+      receipt: {
+        version: 1,
+        requestID: request.id,
+        startedAt,
+        finishedAt: Date.now(),
+        effect: request.operation === "background_snapshot" ? "observe" : "interact",
+        outcome: proof.confirmed ? "confirmed" : "unknown",
+        target: { surface: "desktop", windowID: window },
+        ...(observation ? { observationID: observation } : {}),
+      },
+    }
   }
 
   private async observe(
@@ -874,13 +981,15 @@ export class DesktopBridge {
   }
 
   private scrub(receipt: Receipt): void {
-    if (receipt.result?.operation !== "sequence") return
+    if (receipt.result?.operation !== "sequence" && receipt.result?.operation !== "background_action") return
+    const background = receipt.result.operation === "background_action"
     const proof = receipt.result.receipt
     receipt.result = undefined
     receipt.failure = {
       code: "invalid_request",
-      message:
-        "The desktop sequence ran, but its final frame is not retained after delivery. It will not be replayed; observe the desktop before continuing.",
+      message: background
+        ? "The background desktop action ran, but its application content is not retained after delivery. It will not be replayed; observe the target before continuing."
+        : "The desktop sequence ran, but its final frame is not retained after delivery. It will not be replayed; observe the desktop before continuing.",
       receipt: { ...proof, outcome: "unknown" },
     }
   }
@@ -1140,12 +1249,14 @@ export class DesktopBridge {
           .map(([key, value]) => ({
             id: key,
             fingerprint: value.fingerprint,
-            ...(value.result?.operation === "sequence"
+            ...(value.result?.operation === "sequence" || value.result?.operation === "background_action"
               ? {
                   failure: {
                     code: "invalid_request" as const,
                     message:
-                      "The desktop sequence ran, but its final frame is not retained after restart. It will not be replayed; observe the desktop before continuing.",
+                      value.result.operation === "background_action"
+                        ? "The background desktop action ran, but its application content is not retained after restart. It will not be replayed; observe the target before continuing."
+                        : "The desktop sequence ran, but its final frame is not retained after restart. It will not be replayed; observe the desktop before continuing.",
                     receipt: { ...value.result.receipt, outcome: "unknown" as const },
                   },
                 }
@@ -1216,22 +1327,12 @@ export class DesktopBridge {
 function authorization(
   request: Exclude<DesktopRequest, AuthorizeRequest | { operation: "sequence" }>,
 ): AuthorizeRequest {
-  const action =
-    request.operation === "observe" || request.operation === "watch" || request.operation === "windows"
-      ? "observe"
-      : request.operation === "focus"
-        ? "window"
-        : request.operation === "scroll"
-          ? "scroll"
-          : request.operation === "type" || request.operation === "key"
-            ? "keyboard"
-            : "pointer"
   return {
     id: request.id,
     sessionID: request.sessionID,
     operation: "authorize",
     surface: "desktop",
-    action,
+    action: category(request),
     ...("target" in request && request.target ? { target: request.target } : {}),
     ...("target" in request && request.target
       ? { windowID: request.target.windowID }
@@ -1243,6 +1344,15 @@ function authorization(
     sensitive: "sensitive" in request ? request.sensitive : false,
     ...(request.authorization?.delegation ? { delegation: request.authorization.delegation } : {}),
   }
+}
+
+function category(request: Exclude<DesktopRequest, AuthorizeRequest | { operation: "sequence" }>) {
+  if (["observe", "watch", "windows", "background_snapshot"].includes(request.operation)) return "observe" as const
+  if (request.operation === "background_action")
+    return request.action === "set_value" ? ("keyboard" as const) : ("pointer" as const)
+  if (request.operation === "focus") return "window" as const
+  if (request.operation === "scroll") return "scroll" as const
+  return request.operation === "type" || request.operation === "key" ? ("keyboard" as const) : ("pointer" as const)
 }
 
 function sequenceAuthorization(
@@ -1292,6 +1402,10 @@ function auditProof(value: Receipt) {
   return undefined
 }
 
+function settled(operation: unknown, outcome: unknown) {
+  return outcome === "confirmed" || (operation === "background_action" && outcome === "unknown")
+}
+
 function persistable(value: unknown): value is ActionResult {
   if (!value || typeof value !== "object") return false
   const result = value as { operation?: unknown; receipt?: unknown }
@@ -1305,7 +1419,7 @@ function persistable(value: unknown): value is ActionResult {
     Number.isFinite(receipt.finishedAt) &&
     ((result.operation === "focus" && receipt.effect === "manage") ||
       (result.operation !== "focus" && receipt.effect === "interact")) &&
-    receipt.outcome === "confirmed" &&
+    settled(result.operation, receipt.outcome) &&
     typeof receipt.observationID === "string" &&
     !!receipt.target &&
     typeof receipt.target === "object" &&

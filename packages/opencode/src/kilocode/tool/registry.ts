@@ -46,6 +46,7 @@ import { AskOptionsTool } from "./ask-options" // raya_change - Milestone C sele
 import { BrowserTools } from "./browser-host" // raya_change - Milestone F browser tools
 import { Browser } from "@/kilocode/browser/service" // raya_change - Milestone F browser bridge
 import { DesktopTools } from "./desktop-host"
+import { DesktopBackgroundTools } from "./desktop-background"
 import { Desktop } from "@/kilocode/desktop/service"
 import { CanvasTools } from "./canvas-host" // raya_change - Milestone E canvas tools
 import { SecondBrain } from "@/kilocode/second-brain/service"
@@ -163,7 +164,9 @@ export namespace KiloToolRegistry {
         : undefined
       // raya_change end
       const desktopTools = desktop
-        ? yield* Effect.all(DesktopTools).pipe(Effect.provideService(Desktop.Service, desktop))
+        ? yield* Effect.all([...DesktopTools, ...DesktopBackgroundTools]).pipe(
+            Effect.provideService(Desktop.Service, desktop),
+          )
         : undefined
       // raya_change start - Milestone E canvas tools
       const canvasTools = canvas

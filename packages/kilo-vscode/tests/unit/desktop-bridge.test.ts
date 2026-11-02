@@ -8,6 +8,7 @@ import {
 } from "../../src/services/computer-use/desktop-bridge"
 import { DesktopSession, type DesktopDriver } from "../../src/services/computer-use/desktop-session"
 import { NativeInputPreflightError } from "../../src/services/computer-use/desktop-input-host"
+import type { DesktopBackgroundHost } from "../../src/services/computer-use/desktop-background-host"
 import { ComputerUseLeaseStore, type SensitivePolicy } from "../../src/services/computer-use/lease-store"
 import { firstChanged } from "../../src/services/computer-use/desktop-cadence"
 import type { ConnectionState } from "../../src/services/cli-backend/connection-service"
@@ -46,6 +47,7 @@ function setup(
     listedIdentity?: string | (() => string)
     onCapture?: () => void
     limitFrames?: number
+    background?: Pick<DesktopBackgroundHost, "execute">
     native?: {
       outcome: "confirmed" | "refused" | "cancelled" | "unknown"
       code?: string
@@ -226,6 +228,7 @@ function setup(
             }
           }
         : undefined,
+    input.background,
   )
   return { bridge, session, events, states, replies, rejects, actions, checks, focused, observed: () => observed }
 }
@@ -249,7 +252,7 @@ describe("desktop observation bridge", () => {
     test.bridge.dispose()
   })
 
-  async function selected() {
+  async function selected(level: "autonomous" | "observe" = "autonomous") {
     const store = new ComputerUseLeaseStore(
       { get: <T>() => undefined as T | undefined, update: async () => {} },
       () => 100,
@@ -269,17 +272,103 @@ describe("desktop observation bridge", () => {
     ) as SensitivePolicy
     const lease = await store.grant({
       sessionID: "ses_parent",
-      level: "autonomous",
+      level,
       duration: "session",
       applications: "current",
       windowID: "window_2",
       identity: "process_test",
-      actions: ["observe", "pointer", "window"],
+      actions: level === "observe" ? ["observe"] : ["observe", "pointer", "window"],
       sensitive,
       cooperativeInput: false,
     })
     return { store, lease }
   }
+
+  it("accepts a selected background sensitive prompt without foreground input while preserving grant boundaries", async () => {
+    for (const scenario of ["approved", "wrong", "changed", "observe"] as const) {
+      const grant = await selected(scenario === "observe" ? "observe" : "autonomous")
+      let delivered = 0
+      const provider: Pick<DesktopBackgroundHost, "execute"> = {
+        execute: async (input, hooks) => {
+          await hooks.authorize("observe")
+          await hooks.verify(input.target, { pid: 7, instance: "windows-proc-v1:7:100" })
+          await hooks.authorize("pointer", {
+            role: "button",
+            name: "Confirm",
+            automationID: "Send",
+            ref: "@snapshot:e1",
+          })
+          await hooks.dispatch()
+          delivered++
+          return {
+            ok: true,
+            attempted: true,
+            result: { action: { data: { disposition: { delivery: "delivered_verified" } } } },
+            cleanup: { ok: true },
+            failure: undefined,
+          }
+        },
+      }
+      const test = setup({
+        store: memory(),
+        listed: ["window_2"],
+        listedIdentity: scenario === "changed" ? "replaced_process" : "process_test",
+        currentWindow: "window_other",
+        validate: (request) => grant.store.authorize(request),
+        background: provider,
+      })
+      const action: DesktopRequest = {
+        id: `background_sensitive_${scenario}`,
+        sessionID: "ses_parent",
+        operation: "background_action",
+        target: { version: 1, windowID: scenario === "wrong" ? "window_other" : "window_2" },
+        action: "click",
+        role: "button",
+        name: "Confirm",
+        sensitive: "communications",
+        authorization: { kind: "prompt" },
+      }
+      if (scenario === "approved")
+        expect(
+          grant.store.authorize({
+            id: "background_policy",
+            operation: "authorize",
+            sessionID: action.sessionID,
+            surface: "desktop",
+            action: "pointer",
+            target: action.target,
+            sensitive: "communications",
+          }),
+        ).toMatchObject({ decision: "ask", windowID: "window_2", identity: "process_test" })
+      for (const listener of test.events)
+        listener({ type: "kilocode.desktop.requested", properties: action } as SSEPayload, "C:\\workspace")
+      await Bun.sleep(20)
+      expect(test.focused).toEqual([])
+      expect(test.actions).toEqual([])
+      expect(test.observed()).toBe(0)
+      expect(delivered).toBe(scenario === "approved" ? 1 : 0)
+      if (scenario === "approved") {
+        expect(test.rejects).toEqual([])
+        expect(test.replies).toContainEqual(
+          expect.objectContaining({
+            requestID: action.id,
+            result: expect.objectContaining({
+              operation: "background_action",
+              receipt: expect.objectContaining({ outcome: "confirmed" }),
+            }),
+          }),
+        )
+        expect(
+          test.checks.filter((entry) => (entry as { sensitive?: unknown }).sensitive === "communications").length,
+        ).toBeGreaterThan(1)
+      }
+      if (scenario !== "approved") {
+        expect(test.replies).toEqual([])
+        expect(test.rejects).toContainEqual(expect.objectContaining({ requestID: action.id }))
+      }
+      test.bridge.dispose()
+    }
+  })
 
   async function multi() {
     const store = new ComputerUseLeaseStore(

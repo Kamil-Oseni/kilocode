@@ -1242,6 +1242,128 @@ export type DesktopRequest =
   | {
       id: DesktopRequestId
       sessionID: string
+      operation: "background_snapshot"
+      target: {
+        version: 1
+        windowID: string
+      }
+      authorization?:
+        | {
+            kind: "grant"
+            grantID: ComputerUseGrantId
+            delegation?: {
+              parentSessionID: string
+              childSessionID: string
+              grantID: ComputerUseGrantId
+              windowID?: string
+              identity?: string
+            }
+          }
+        | {
+            kind: "prompt"
+            delegation?: {
+              parentSessionID: string
+              childSessionID: string
+              grantID: ComputerUseGrantId
+              windowID?: string
+              identity?: string
+            }
+          }
+    }
+  | {
+      id: DesktopRequestId
+      sessionID: string
+      operation: "background_action"
+      target: {
+        version: 1
+        windowID: string
+      }
+      authorization?:
+        | {
+            kind: "grant"
+            grantID: ComputerUseGrantId
+            delegation?: {
+              parentSessionID: string
+              childSessionID: string
+              grantID: ComputerUseGrantId
+              windowID?: string
+              identity?: string
+            }
+          }
+        | {
+            kind: "prompt"
+            delegation?: {
+              parentSessionID: string
+              childSessionID: string
+              grantID: ComputerUseGrantId
+              windowID?: string
+              identity?: string
+            }
+          }
+      sensitive:
+        | false
+        | "communications"
+        | "financial"
+        | "credentials"
+        | "software"
+        | "system"
+        | "deletion"
+        | "disclosure"
+        | "legal"
+        | "publishing"
+      name: string
+      action: "click"
+      role: "button" | "textfield" | "checkbox" | "menuitem" | "combobox" | "link"
+    }
+  | {
+      id: DesktopRequestId
+      sessionID: string
+      operation: "background_action"
+      target: {
+        version: 1
+        windowID: string
+      }
+      authorization?:
+        | {
+            kind: "grant"
+            grantID: ComputerUseGrantId
+            delegation?: {
+              parentSessionID: string
+              childSessionID: string
+              grantID: ComputerUseGrantId
+              windowID?: string
+              identity?: string
+            }
+          }
+        | {
+            kind: "prompt"
+            delegation?: {
+              parentSessionID: string
+              childSessionID: string
+              grantID: ComputerUseGrantId
+              windowID?: string
+              identity?: string
+            }
+          }
+      sensitive:
+        | false
+        | "communications"
+        | "financial"
+        | "credentials"
+        | "software"
+        | "system"
+        | "deletion"
+        | "disclosure"
+        | "legal"
+        | "publishing"
+      name: string
+      action: "set_value"
+      role: "textfield"
+      value: string
+    }
+  | {
+      id: DesktopRequestId
+      sessionID: string
       operation: "observe"
       authorization?:
         | {
@@ -6741,6 +6863,16 @@ export type DesktopResult =
         windowID: string
         identity: string
       }
+    }
+  | {
+      operation: "background_snapshot"
+      output: string
+      receipt: ComputerUseReceipt
+    }
+  | {
+      operation: "background_action"
+      output: string
+      receipt: ComputerUseReceipt
     }
   | {
       operation: "observe"

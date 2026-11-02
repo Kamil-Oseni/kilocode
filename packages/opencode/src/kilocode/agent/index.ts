@@ -478,6 +478,8 @@ export function prepare(cfg: Config.Info): KiloData {
           browser_smoke_test: "allow" as const, // raya_change - Milestone G authenticated smoke tests
           // raya_change start - native desktop access is always scoped to one reviewed request
           desktop_observe: "ask" as const,
+          desktop_background_snapshot: "ask" as const,
+          desktop_background_action: "ask" as const,
           desktop_windows: "ask" as const,
           desktop_focus: "ask" as const,
           desktop_watch: "ask" as const,
@@ -935,6 +937,8 @@ export function patchAgents(
           browser_evaluate: "allow",
           browser_smoke_test: "allow",
           desktop_observe: "ask",
+          desktop_background_snapshot: "ask",
+          desktop_background_action: "ask",
           desktop_windows: "ask",
           desktop_focus: "ask",
           desktop_watch: "ask",

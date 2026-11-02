@@ -15,6 +15,10 @@ const rules: ReadonlyArray<readonly [SensitiveCategory, RegExp]> = [
 
 function infer(control: DesktopControl): SensitiveCategory[] {
   const text = `${control.name ?? ""} ${control.automationID ?? ""}`.trim()
+  return classify(text)
+}
+
+export function classify(text: string): SensitiveCategory[] {
   if (!text) return []
   return rules.filter(([, pattern]) => pattern.test(text)).map(([category]) => category)
 }

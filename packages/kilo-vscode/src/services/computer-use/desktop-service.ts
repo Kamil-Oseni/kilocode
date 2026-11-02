@@ -1,5 +1,6 @@
 import * as vscode from "vscode"
-import { join } from "node:path"
+import { isAbsolute, join } from "node:path"
+import { homedir } from "node:os"
 import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
 import { nativeCaptureTrial } from "../../commands/native-capture-trial-core"
@@ -8,6 +9,7 @@ import { DesktopPanel } from "./desktop-panel"
 import { DesktopSession } from "./desktop-session"
 import { WindowsDesktopDriver } from "./desktop-windows"
 import { DesktopBridge } from "./desktop-bridge"
+import { DesktopBackgroundHost } from "./desktop-background-host"
 import { ComputerUseLeaseStore, type Authorization, type AuthorizationRequest } from "./lease-store"
 import type { KiloConnectionService } from "../cli-backend/connection-service"
 import { WindowsPauseHotkey } from "./windows-pause-hotkey"
@@ -114,6 +116,10 @@ export class DesktopAutomationService implements vscode.Disposable {
         lease.state === "paused" ? new vscode.ThemeColor("statusBarItem.warningBackground") : undefined
       this.indicator!.show()
     })
+    const root =
+      process.env.RAYA_CONFIG_DIR?.trim() ||
+      process.env.KILO_CONFIG_DIR?.trim() ||
+      join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "kilo")
     this.bridge = new DesktopBridge(
       connection,
       this.session,
@@ -185,6 +191,9 @@ export class DesktopAutomationService implements vscode.Disposable {
         this.hotkey?.isReady
           ? this.lease!.authorize(request)
           : { operation: "authorize", decision: "deny", reason: "The global Pause Raya shortcut is not ready" },
+      isAbsolute(root)
+        ? new DesktopBackgroundHost(join(root, "skills", "raya-agent-desktop", "install.json"))
+        : undefined,
     )
     this.capture = new DesktopCaptureLifecycle(
       this.lease,

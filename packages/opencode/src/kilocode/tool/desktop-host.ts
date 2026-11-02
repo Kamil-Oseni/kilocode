@@ -29,7 +29,7 @@ function abort(signal: AbortSignal) {
   })
 }
 
-function run(desktop: Desktop.Interface, input: Input, signal: AbortSignal) {
+export function run(desktop: Desktop.Interface, input: Input, signal: AbortSignal) {
   return desktop.request(input).pipe(Effect.raceFirst(abort(signal)), Effect.orDie)
 }
 
@@ -37,7 +37,7 @@ function classified(value: Classification): SensitiveKind | false {
   return value === "ordinary" ? false : value
 }
 
-function approve(
+export function approve(
   desktop: Desktop.Interface,
   ctx: Tool.Context,
   input: Parameters<Tool.Context["ask"]>[0] & {

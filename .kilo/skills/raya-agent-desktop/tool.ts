@@ -79,7 +79,11 @@ export default tool({
       throw new Error("Set value requires an observed textfield and an explicit value")
     if (args.action !== "set_value" && args.value !== undefined) throw new Error("Value is only valid for set_value")
     ctx.abort.throwIfAborted()
-    const root = process.env.KILO_CONFIG_DIR ?? path.join(homedir(), ".config", "kilo")
+    const root =
+      process.env.RAYA_CONFIG_DIR?.trim() ||
+      process.env.KILO_CONFIG_DIR?.trim() ||
+      path.join(homedir(), ".config", "kilo")
+    if (!path.isAbsolute(root)) throw new Error("Background desktop requires an absolute reviewed config directory")
     const cfg = object(
       JSON.parse(await readFile(path.join(root, "skills", "raya-agent-desktop", "install.json"), "utf8")),
     )

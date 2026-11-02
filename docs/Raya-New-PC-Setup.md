@@ -1,3 +1,11 @@
+November 2, 2026 -- Installed local9B trial stopped before worker admission
+
+The installed 416b437ad0 backend accepted one English saved-team request using local-jobs 9B and process-only mapped loading. Its effective config matched the independent 607d2f baseline with only provider.local-jobs.options.localInferenceMmap=true added; the saved config remained unchanged. Two malformed model-authored contracts were rejected before dispatch. The owned Ollama job then crossed its 6 GiB available-RAM reserve at 6,387,113,984 bytes and retired its exact family after 151.750 seconds. No worker Run, delegation or output directory was created. This is not a completed worker-chain or semantic pass.
+
+The exact root session was aborted through the native API; session status became empty and organization active work zero. Original backend owner73968 joined zero, original Ollama owner69862 joined one with its resource cancellation retained, and readers joined. All nine definitions and all 89 history objects remained unchanged. Durable native-family proof is copied under normal-service-c4aabfd9-63f0-49f6-ab8c-f0e7f4b060f3/native-family-retired.json; the final resource-stopped outcome is in that same evidence directory.
+
+Fresh admission explicitly retained missing historical Temp-proof limitations, corrected only reversible encoding and UUID-index errors in frozen comparison metadata, and independently checked the exact stale idle lease and interrupted Goal fence. No saved history, counter, config or output was repaired. The actual Auto tool schema already supports contract-only calls; diagnostics currently include irrelevant legacy-branch errors for an invalid contract and are being narrowed separately. Broad components remain 3/9 (33.3%); overall readiness is unmeasured. Voice remains deferred. No further local9B retry is planned at this headroom.
+
 November 2, 2026 -- Four Routine and local-model fixes installed
 
 Installed source `416b437ad0`, version `7.4.23-snapshot+416b437ad0.local.1793602820736`, now includes optional Ollama mapped loading, waiting-parent required-child Stop, authenticated standing-budget accounting, and standing-parent child evidence/wait support. The prior causal source proofs retain their scope; child artifacts remain evidence without granting the parent write ownership.

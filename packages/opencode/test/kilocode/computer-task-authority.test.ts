@@ -17,6 +17,13 @@ describe("Computer Use child authority", () => {
     expect(Permission.evaluate("bash", "*", child).action).toBe("deny")
     expect(TaskAuthority.permits("read", "desktop_observe", "*")).toBe(false)
     expect(TaskAuthority.permits("computer", "desktop_observe", "*")).toBe(true)
+    for (const tool of ["desktop_background_snapshot", "desktop_background_action"]) {
+      expect(Permission.evaluate(tool, "*", child).action).toBe("allow")
+      expect(TaskAuthority.permits("computer", tool, "*")).toBe(true)
+      expect(TaskAuthority.permits("read", tool, "*")).toBe(false)
+    }
+    for (const access of ["computer", "read"] as const)
+      expect(TaskAuthority.permits(access, "background_desktop", "*")).toBe(false)
   })
 
   it("keeps explicit parent read denials while desktop authority uses its own grant", () => {
@@ -33,10 +40,24 @@ describe("Computer Use child authority", () => {
   })
 
   it("preserves a specific parent desktop denial", () => {
-    const parent = Permission.fromConfig({ "*": "deny", desktop_sequence: "deny" })
+    const parent = Permission.fromConfig({
+      "*": "deny",
+      desktop_sequence: "deny",
+      desktop_background_snapshot: "deny",
+      desktop_background_action: "deny",
+    })
     const child = Permission.merge(TaskAuthority.rules("computer"), TaskAuthority.denies("computer", parent))
     expect(Permission.evaluate("desktop_observe", "*", child).action).toBe("allow")
     expect(Permission.evaluate("desktop_sequence", "*", child).action).toBe("deny")
+    const metadata = TaskAuthority.inherit(
+      TaskAuthority.save({}, "computer"),
+      { id: "parent", permission: Permission.fromConfig({ desktop_background_action: "deny" }) },
+      Permission.fromConfig({ desktop_background_snapshot: "deny" }),
+    )
+    for (const tool of ["desktop_background_snapshot", "desktop_background_action"]) {
+      expect(Permission.evaluate(tool, "*", child).action).toBe("deny")
+      expect(Permission.evaluate(tool, "*", TaskAuthority.hard(metadata, tool, ["*"])).action).toBe("deny")
+    }
   })
 
   it("accepts only the exact persisted child lineage and grant", () => {

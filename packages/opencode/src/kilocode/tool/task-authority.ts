@@ -68,6 +68,8 @@ export namespace TaskAuthority {
     "desktop_key",
     "desktop_scroll",
     "desktop_sequence",
+    "desktop_background_snapshot",
+    "desktop_background_action",
   ]
 
   export function read(metadata?: Record<string, unknown>): Access | undefined {

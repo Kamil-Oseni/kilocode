@@ -60,7 +60,6 @@ export function createOwner(registry = RuntimeRegistry) {
         }
         const ticket = Object.freeze({})
         active.add(ticket)
-        let entered = false
         const work = Effect.gen(function* () {
           const root = yield* Effect.promise(() => resolveProfileRoot({ kind: "json", path: selected }))
           return yield* Effect.acquireUseRelease(
@@ -92,10 +91,7 @@ export function createOwner(registry = RuntimeRegistry) {
                       })
                       yield* check
                       yield* Effect.sync(() => registerProcessProfile([root.path]))
-                      return yield* Effect.suspend(() => {
-                        entered = true
-                        return body(root.path)
-                      })
+                      return yield* Effect.suspend(() => body(root.path))
                     }),
                   ),
                   check,
@@ -107,7 +103,11 @@ export function createOwner(registry = RuntimeRegistry) {
         return restore(work).pipe(
           Effect.onExit((exit) =>
             Effect.sync(() => {
-              if (Exit.isFailure(exit) && (entered || !Cause.hasInterruptsOnly(exit.cause))) failures.push(exit.cause)
+              // This observes the final exit after scoped finalizers, the root
+              // recheck and profile-lease release. Pure cancellation remains the
+              // caller's result, but must not poison later retirement. Any failed
+              // cleanup or ownership check adds a non-interrupt cause and stays.
+              if (Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)) failures.push(exit.cause)
               active.delete(ticket)
               finish?.()
             }),

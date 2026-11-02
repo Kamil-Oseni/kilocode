@@ -282,8 +282,8 @@ test("interrupt stalled real child but join its held exit and finalizer before r
   release.resolve()
   await interrupt
   expect(Exit.isFailure(await Effect.runPromise(Fiber.await(fiber)))).toBe(true)
-  expect(await closing).toBe("failure")
-  expect(owner.snapshot()).toEqual({ installed: true, closed: true, active: 0, failures: 1 })
+  expect(await closing).toBe("success")
+  expect(owner.snapshot()).toEqual({ installed: true, closed: true, active: 0, failures: 0 })
   expect(await readFile(path.join(bin, "finalized"), "utf8")).toBe("joined")
   expect(processProfileSnapshot().roots).toContain(bin)
 }, 10_000)

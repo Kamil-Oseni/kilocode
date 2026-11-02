@@ -6,6 +6,7 @@ import { Effect, Schema } from "effect"
 import {
   RayaRoutineDelegationTable as Delegation,
   RayaRoutineOrganizationTable as Organization,
+  RayaRoutineOrganizationMemberTable as Member,
 } from "@opencode-ai/core/kilocode/routine.sql"
 import type { Database } from "@opencode-ai/core/database/database"
 import type { SessionV1 } from "@opencode-ai/core/v1/session"
@@ -43,6 +44,9 @@ const snapshot = Schema.Struct({
   objective: Schema.String,
   outputs: Schema.optional(Schema.Array(Schema.String)),
   contract: Schema.optional(Reference),
+  organizationPolicy: Schema.optional(
+    Schema.Struct({ organizationID: Schema.String, organizationRevision: Schema.Number, sha256: Schema.String }),
+  ),
 })
 type Row = typeof Delegation.$inferSelect
 type Part = SessionV1.ToolPart
@@ -377,42 +381,84 @@ export function observe(input: {
       )
     )
       return yield* unavailable()
-    if (parent.run.status !== "running" || !isDeepStrictEqual(parent.goal, input.goal) || !parent.marker.delegationID)
-      return yield* unavailable()
-    const incoming = yield* lookup(parent.marker.delegationID)
-    if (!incoming.organization_id) return yield* unavailable()
-    const organization = yield* database.db
-      .select()
-      .from(Organization)
-      .where(eq(Organization.id, incoming.organization_id))
-      .limit(2)
-      .all()
+    if (parent.run.status !== "running" || !isDeepStrictEqual(parent.goal, input.goal)) return yield* unavailable()
+    const incoming = parent.marker.delegationID ? yield* lookup(parent.marker.delegationID) : undefined
+    const id = incoming ? incoming.organization_id : parent.marker.organizationID
+    if (!id) return yield* unavailable()
+    const organization = yield* database.db.select().from(Organization).where(eq(Organization.id, id)).limit(2).all()
     if (organization.length !== 1 || organization[0].archived_at !== null) return yield* unavailable()
     checks.push(
       database.db
         .select()
         .from(Organization)
-        .where(eq(Organization.id, incoming.organization_id))
+        .where(eq(Organization.id, id))
         .limit(2)
         .all()
         .pipe(Effect.flatMap((next) => (isDeepStrictEqual(next, organization) ? Effect.void : unavailable()))),
     )
-    const outputs =
-      incoming.outputs === null
-        ? undefined
-        : yield* parse(incoming.outputs).pipe(Effect.flatMap(Schema.decodeUnknownEffect(Outputs)))
-    if (
-      !["running", "needs_input"].includes(incoming.state) ||
-      incoming.recipient_id !== owner.agentID ||
-      incoming.child_run_id !== owner.runID ||
-      incoming.session_id !== owner.sessionID ||
-      incoming.organization_id !== parent.marker.organizationID ||
-      incoming.organization_revision !== parent.marker.organizationRevision ||
-      incoming.workspace === null ||
-      location(incoming.workspace) !== location(parent.target.directory) ||
-      !isDeepStrictEqual(outputs, parent.saved.outputs)
-    )
-      return yield* unavailable()
+    if (incoming) {
+      const outputs =
+        incoming.outputs === null
+          ? undefined
+          : yield* parse(incoming.outputs).pipe(Effect.flatMap(Schema.decodeUnknownEffect(Outputs)))
+      if (
+        !["running", "needs_input"].includes(incoming.state) ||
+        incoming.recipient_id !== owner.agentID ||
+        incoming.child_run_id !== owner.runID ||
+        incoming.session_id !== owner.sessionID ||
+        incoming.organization_id !== parent.marker.organizationID ||
+        incoming.organization_revision !== parent.marker.organizationRevision ||
+        incoming.workspace === null ||
+        location(incoming.workspace) !== location(parent.target.directory) ||
+        !isDeepStrictEqual(outputs, parent.saved.outputs)
+      )
+        return yield* unavailable()
+    }
+    if (!incoming) {
+      const linked = yield* database.db
+        .select()
+        .from(Delegation)
+        .where(eq(Delegation.session_id, owner.sessionID))
+        .limit(2)
+        .all()
+      if (linked.length) return yield* unavailable()
+      checks.push(
+        database.db
+          .select()
+          .from(Delegation)
+          .where(eq(Delegation.session_id, owner.sessionID))
+          .limit(2)
+          .all()
+          .pipe(Effect.flatMap((next) => (next.length === 0 ? Effect.void : unavailable()))),
+      )
+      const current = organization[0]
+      const policy = current.policy
+        ? { organizationID: id, organizationRevision: current.revision, sha256: hash(current.policy) }
+        : undefined
+      if (
+        current.revision !== parent.marker.organizationRevision ||
+        current.stopping_at !== null ||
+        current.stopped_at !== null ||
+        !isDeepStrictEqual(parent.saved.organizationPolicy, policy)
+      )
+        return yield* unavailable()
+      const members = yield* database.db
+        .select()
+        .from(Member)
+        .where(and(eq(Member.organization_id, id), eq(Member.agent_id, owner.agentID)))
+        .limit(2)
+        .all()
+      if (members.length !== 1) return yield* unavailable()
+      checks.push(
+        database.db
+          .select()
+          .from(Member)
+          .where(and(eq(Member.organization_id, id), eq(Member.agent_id, owner.agentID)))
+          .limit(2)
+          .all()
+          .pipe(Effect.flatMap((next) => (isDeepStrictEqual(next, members) ? Effect.void : unavailable()))),
+      )
+    }
     const children = yield* database.db
       .select()
       .from(Delegation)
@@ -429,12 +475,12 @@ export function observe(input: {
         .all()
         .pipe(Effect.flatMap((next) => (isDeepStrictEqual(next, children) ? Effect.void : unavailable()))),
     )
-    const match = (row: Row, part: Receipt, sender: string, runID: string, parentID: string) =>
+    const match = (row: Row, part: Receipt, sender: string, runID: string, parentID: string | null) =>
       row.parent_id === parentID &&
       row.parent_run_id === runID &&
       row.sender_id === sender &&
-      row.organization_id === incoming.organization_id &&
-      row.organization_revision === incoming.organization_revision &&
+      row.organization_id === id &&
+      row.organization_revision === (incoming ? incoming.organization_revision : parent.marker.organizationRevision) &&
       row.workspace !== null &&
       location(row.workspace) === location(parent.target.directory) &&
       row.source === source(part, sender, row.organization_id!) &&
@@ -446,7 +492,7 @@ export function observe(input: {
       part.state.metadata?.organizationRevision === row.organization_revision
     for (const row of children) {
       const origins = calls.filter((part) => part.state.metadata?.delegationID === row.id)
-      if (origins.length !== 1 || !match(row, origins[0], owner.agentID, owner.runID, incoming.id))
+      if (origins.length !== 1 || !match(row, origins[0], owner.agentID, owner.runID, incoming?.id ?? null))
         return yield* unavailable()
       const origin = origins[0]
       const stage = view ? yield* store.child(view, row) : undefined

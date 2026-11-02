@@ -8,6 +8,8 @@ import {
   RayaRoutineDelegationTable as Delegation,
   RayaRoutineJobContractTable as Contracts,
   RayaRoutineMessageTable as Inbox,
+  RayaRoutineOrganizationTable as Organization,
+  RayaRoutineOrganizationMemberTable as Member,
 } from "@opencode-ai/core/kilocode/routine.sql"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { InputReceipt } from "@opencode-ai/core/kilocode/input-receipt"
@@ -1146,10 +1148,18 @@ it.live(
   60000,
 )
 
-function lifecycle(name: string, body: (mode: "resume" | "stop" | "standing") => Parameters<typeof it.live>[1], timeout: number) {
+function lifecycle(
+  name: string,
+  body: (mode: "resume" | "stop" | "standing") => Parameters<typeof it.live>[1],
+  timeout: number,
+) {
   it.live(name, body("resume"), timeout)
   it.live("canonical Stop retires a parked native parent and its active required child", body("stop"), timeout)
-  it.live("canonical Stop retires a parked standing parent and preserves unrelated queued work", body("standing"), timeout)
+  it.live(
+    "canonical Stop retires a parked standing parent and preserves unrelated queued work",
+    body("standing"),
+    timeout,
+  )
 }
 
 lifecycle(
@@ -1197,6 +1207,7 @@ lifecycle(
         const team = yield* organizations.create({
           name: "Evidence team",
           purpose: "Read-only evidence bridge fixture",
+          ...(mode === "standing" ? { policy: "Use only current native worker evidence." } : {}),
           members: workers.map((item) => ({ agentID: item.id, role: item.name })),
           delegations: [
             { senderID: dispatch.id, recipientID: researcher.id },
@@ -1246,7 +1257,7 @@ lifecycle(
                   ...(standing ? {} : { delegationID: row.id }),
                   organizationID: team.id,
                   organizationRevision: team.revision,
-                  outputs: row.outputs,
+                  ...(standing ? {} : { outputs: row.outputs }),
                 },
               },
               permission: RayaTask.rules(agent, directory),
@@ -1259,7 +1270,7 @@ lifecycle(
               model,
               time: { created: Date.now() },
             })
-            const objective = prompt(sender, agent, row)
+            const objective = standing ? row.objective : prompt(sender, agent, row)
             yield* sessions.updatePart({
               id: PartID.ascending(),
               sessionID: session.id,
@@ -1297,7 +1308,16 @@ lifecycle(
               at: run.at,
               definition: agent,
               objective,
-              outputs: row.outputs,
+              ...(standing ? {} : { outputs: row.outputs }),
+              ...(team.policy
+                ? {
+                    organizationPolicy: {
+                      organizationID: team.id,
+                      organizationRevision: team.revision,
+                      sha256: createHash("sha256").update(team.policy, "utf8").digest("hex"),
+                    },
+                  }
+                : {}),
             })
             if (!standing) yield* errands.attach(row.id, rid, session.id)
             const assistant = yield* sessions.updateMessage({
@@ -1422,6 +1442,45 @@ lifecycle(
         const assigned = yield* handoff(root, builder, [files[0]], files.slice(1), "research-handoff")
         yield* tasks.transition(held, { ...held, status: "complete" })
         const child = yield* open(builder, assigned, researcher)
+        if (mode === "standing") {
+          const current = yield* goals.get(root.session.id)
+          if (!current) throw new Error("Standing parent Goal disappeared")
+          const observe = () =>
+            sessions.messages({ sessionID: root.session.id }).pipe(
+              Effect.flatMap((rows) => RoutineEvidence.observe({ database, storage, sessions, goal: current, rows })),
+              Effect.exit,
+            )
+          expect(Exit.isSuccess(yield* observe())).toBe(true)
+          const membership = yield* database.db.select().from(Member).where(eq(Member.agent_id, researcher.id)).all()
+          if (membership.length !== 1) throw new Error("Actual standing membership unavailable")
+          try {
+            yield* database.db.delete(Member).where(eq(Member.agent_id, researcher.id)).run()
+            expect(Exit.isFailure(yield* observe())).toBe(true)
+          } finally {
+            yield* database.db.insert(Member).values(membership).run()
+          }
+          const organization = yield* database.db.select().from(Organization).where(eq(Organization.id, team.id)).get()
+          if (!organization) throw new Error("Actual organization row unavailable")
+          for (const patch of [{ revision: team.revision + 1 }, { policy: "A different unaccepted policy." }]) {
+            try {
+              yield* database.db.update(Organization).set(patch).where(eq(Organization.id, team.id)).run()
+              expect(Exit.isFailure(yield* observe())).toBe(true)
+            } finally {
+              yield* database.db.update(Organization).set(organization).where(eq(Organization.id, team.id)).run()
+            }
+          }
+          const row = yield* database.db.select().from(Delegation).where(eq(Delegation.id, assigned.id)).get()
+          if (!row) throw new Error("Actual standing child row unavailable")
+          for (const patch of [{ parent_id: seed.record.id }, { workspace: path.join(directory, "other-workspace") }]) {
+            try {
+              yield* database.db.update(Delegation).set(patch).where(eq(Delegation.id, assigned.id)).run()
+              expect(Exit.isFailure(yield* observe())).toBe(true)
+            } finally {
+              yield* database.db.update(Delegation).set(row).where(eq(Delegation.id, assigned.id)).run()
+            }
+          }
+          expect(Exit.isSuccess(yield* observe())).toBe(true)
+        }
         const catalog = yield* (yield* ToolRegistry.Service).all()
         const update = catalog.find((tool) => tool.id === "update_goal")
         const get = catalog.find((tool) => tool.id === "get_goal")

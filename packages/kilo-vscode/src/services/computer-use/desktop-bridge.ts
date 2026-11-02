@@ -364,6 +364,10 @@ export class DesktopBridge {
     const abort = () => {
       if (!background) onAbort()
     }
+    const stopped = async () => {
+      if (background) onAbort()
+      await interrupted
+    }
     controller.signal.addEventListener("abort", abort, { once: true })
     this.active.set(request.id, controller)
     if (background) this.backgrounds.add(request.id)
@@ -384,8 +388,7 @@ export class DesktopBridge {
         },
       )
       if (controller.signal.aborted) {
-        if (background) onAbort()
-        await interrupted
+        await stopped()
         return
       }
       settled = true
@@ -393,8 +396,7 @@ export class DesktopBridge {
     } catch (error) {
       if (controller.signal.aborted) {
         if (!dispatched) await this.preEvent(request, fingerprint, "cancelled", startedAt)
-        if (background) onAbort()
-        await interrupted
+        await stopped()
         return
       }
       settled = true
@@ -637,33 +639,35 @@ export class DesktopBridge {
       observation = inventory.observation.id
     }
     retirement(false)
-    const result = await this.background.execute(
-      semantic(request, target),
-      {
-        verify: async (_target, owner) => verify(owner),
-        authorize: async (action, control) => {
-          const sensitive =
-            request.operation === "background_action" && action !== "observe" ? request.sensitive : false
-          const expected = control ? classify(`${control.name} ${control.automationID ?? ""}`) : []
-          if (expected.length > 1 || (expected.length === 1 && sensitive !== expected[0]))
-            throw new DesktopAuthorizationRefusal("Observed background control needs its matching sensitive category")
-          const current = this.validate?.({ ...authorization(request), action, sensitive })
-          enforce(current, request.authorization)
-          if (!current || current.decision === "deny" || current.windowID !== window || current.identity !== identity)
-            throw new DesktopAuthorizationRefusal("Background desktop grant is no longer active for this window")
+    const result = await this.background
+      .execute(
+        semantic(request, target),
+        {
+          verify: async (_target, owner) => verify(owner),
+          authorize: async (action, control) => {
+            const sensitive =
+              request.operation === "background_action" && action !== "observe" ? request.sensitive : false
+            const expected = control ? classify(`${control.name} ${control.automationID ?? ""}`) : []
+            if (expected.length > 1 || (expected.length === 1 && sensitive !== expected[0]))
+              throw new DesktopAuthorizationRefusal("Observed background control needs its matching sensitive category")
+            const current = this.validate?.({ ...authorization(request), action, sensitive })
+            enforce(current, request.authorization)
+            if (!current || current.decision === "deny" || current.windowID !== window || current.identity !== identity)
+              throw new DesktopAuthorizationRefusal("Background desktop grant is no longer active for this window")
+          },
+          dispatch: async () => {
+            await onNative({ phase: "reserved", identity: native })
+            reserved = true
+            await verify()
+            signal.throwIfAborted()
+            onDispatch()
+          },
         },
-        dispatch: async () => {
-          await onNative({ phase: "reserved", identity: native })
-          reserved = true
-          await verify()
-          signal.throwIfAborted()
-          onDispatch()
-        },
-      },
-      signal,
-    ).finally(async () => {
-      if (probe) joined = await probe.close()
-    })
+        signal,
+      )
+      .finally(async () => {
+        if (probe) joined = await probe.close()
+      })
     const retired = result.drained && joined
     retirement(retired)
     const proof = outcome(result, request.operation === "background_snapshot")
@@ -1040,7 +1044,7 @@ export class DesktopBridge {
   private scrub(receipt: Receipt): void {
     if (receipt.result?.operation !== "sequence" && receipt.result?.operation !== "background_action") return
     const background = receipt.result.operation === "background_action"
-    const retired = background ? receipt.result.hostRetired : undefined
+    const retired = receipt.result.operation === "background_action" ? receipt.result.hostRetired : undefined
     const proof = receipt.result.receipt
     receipt.result = undefined
     receipt.failure = {
@@ -1312,7 +1316,9 @@ export class DesktopBridge {
               ? {
                   failure: {
                     code: "invalid_request" as const,
-                    ...(value.result.operation === "background_action" ? { hostRetired: value.result.hostRetired } : {}),
+                    ...(value.result.operation === "background_action"
+                      ? { hostRetired: value.result.hostRetired }
+                      : {}),
                     message:
                       value.result.operation === "background_action"
                         ? "The background desktop action ran, but its application content is not retained after restart. It will not be replayed; observe the target before continuing."

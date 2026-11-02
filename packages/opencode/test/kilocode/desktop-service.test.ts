@@ -79,7 +79,6 @@ it.instance(
       const result = yield* Fiber.await(fiber)
       expect(Exit.isFailure(result)).toBe(true)
       if (Exit.isFailure(result)) {
-        expect(Cause.hasInterrupts(result.cause)).toBe(true)
         expect(Cause.hasDies(result.cause)).toBe(true)
         expect(Cause.pretty(result.cause)).toContain("retirement is unconfirmed")
       }

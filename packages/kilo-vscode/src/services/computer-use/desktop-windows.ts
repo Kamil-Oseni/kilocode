@@ -1218,6 +1218,14 @@ export function runner(timeout = 30_000): Runner {
   }
 }
 
+function generation(value: unknown) {
+  return (
+    value === undefined ||
+    value === null ||
+    (typeof value === "string" && value.length <= 200 && /^windows-proc-v1:\d+:\d{1,7}$/.test(value))
+  )
+}
+
 function object(value: string) {
   if (!value) throw new Error("Windows desktop driver returned no result")
   const parsed: unknown = JSON.parse(value)
@@ -2101,13 +2109,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
       )
         throw new Error("Windows desktop window entry is incomplete")
       if (window.processInstance === null) delete window.processInstance
-      if (
-        window.processInstance !== undefined &&
-        (typeof window.processInstance !== "string" ||
-          window.processInstance.length > 200 ||
-          !/^windows-proc-v1:\d+:\d{1,7}$/.test(window.processInstance))
-      )
-        throw new Error("Windows desktop process generation is invalid")
+      if (!generation(window.processInstance)) throw new Error("Windows desktop process generation is invalid")
       return window as DesktopWindow
     })
   }

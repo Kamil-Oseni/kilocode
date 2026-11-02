@@ -374,7 +374,11 @@ describe("desktop observation bridge", () => {
   })
 
   it("acknowledges background cancellation only after provider retirement", async () => {
-    for (const [drained, joined] of [[true, true], [false, true], [true, false]] as const) {
+    for (const [drained, joined] of [
+      [true, true],
+      [false, true],
+      [true, false],
+    ] as const) {
       const grant = await selected("autonomous")
       const entered = Promise.withResolvers<void>()
       const cleanup = Promise.withResolvers<void>()

@@ -50,8 +50,15 @@ export class DesktopBackgroundProbe {
     return new Promise((resolve) => {
       const timer = setTimeout(() => resolve(false), 5_000)
       pending.then(
-        () => { clearTimeout(timer); resolve(true) },
-        (err) => { clearTimeout(timer); console.error("[Raya] Background verifier retirement failed", err); resolve(false) },
+        () => {
+          clearTimeout(timer)
+          resolve(true)
+        },
+        (err) => {
+          clearTimeout(timer)
+          console.error("[Raya] Background verifier retirement failed", err)
+          resolve(false)
+        },
       )
     })
   }

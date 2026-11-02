@@ -1,4 +1,4 @@
-import { Cause, Deferred, Effect, Exit, type Fiber } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber } from "effect"
 import type { Runner } from "@/effect/runner"
 import { observe } from "./observation"
 import { SessionRetirement } from "../session/retirement"
@@ -6,6 +6,7 @@ import { SessionRetirement } from "../session/retirement"
 /** A joined finalizer defect is not proof that the selected work retired safely. */
 export function interrupt<A, E>(fiber: Fiber.Fiber<A, E>) {
   return SessionRetirement.interrupt(fiber).pipe(
+    Effect.andThen(Fiber.await(fiber)),
     Effect.flatMap((exit) =>
       Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)
         ? Effect.failCause(exit.cause).pipe(Effect.orDie)

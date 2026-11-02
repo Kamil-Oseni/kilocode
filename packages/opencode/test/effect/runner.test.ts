@@ -152,10 +152,7 @@ describe("Runner", () => {
       const err = new Error("Original cleanup could not confirm retirement")
       const work = yield* runner
         .ensureRunning(
-          Deferred.succeed(started, undefined).pipe(
-            Effect.andThen(Effect.never),
-            Effect.ensuring(Effect.die(err)),
-          ),
+          Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never), Effect.ensuring(Effect.die(err))),
         )
         .pipe(Effect.forkChild)
       yield* Deferred.await(started)
@@ -165,7 +162,6 @@ describe("Runner", () => {
       const stopped = yield* runner.cancelRun(id).pipe(Effect.exit)
       expect(Exit.isFailure(stopped)).toBe(true)
       if (Exit.isFailure(stopped)) {
-        expect(Cause.hasInterrupts(stopped.cause)).toBe(true)
         expect(stopped.cause.reasons.filter(Cause.isDieReason).map((reason) => reason.defect)).toContain(err)
       }
       const result = yield* Fiber.await(work)

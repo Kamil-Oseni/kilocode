@@ -48,6 +48,10 @@ Local evidence is retained at `.tmp/agent-desktop-live-20261101/result.json`, wi
 
 ## Remaining integration
 
+The optional plugin source is `.kilo/plugins/raya-agent-desktop.ts`, with its tool implementation in `.kilo/skills/raya-agent-desktop/tool.ts`. It uses the existing Raya plugin and permission APIs. Install the reviewed plugin globally so the existing provenance rules can admit it for permitted routine workers; loose tool scripts remain untrusted, and project-local copies do not gain global trust. Each call owns an overlay-free Vercel session, permits only inventory/snapshot/one field write/one semantic click, and returns the action receipt plus fresh readback. It checks the binary hash against the reviewed installation receipt. Names and values are argument data rather than shell commands; action values follow an option terminator. App/window/title must match the fresh snapshot. Concurrent calls to the same window are refused within the current backend; this is not a cross-backend transaction lock.
+
+This new tool is pending focused verification and global installation. Existing skill installation and the earlier two-worker CLI check do not prove it has been discovered or used by an installed Raya worker. Its permission is separate from the existing native desktop panel; it does not change that panel's grants or silently expand a routine's allowed tools. No broad model campaign is required.
+
 Run one authorized background app task through Raya's actual worker routing and verify saved output, cancellation and cleanup. Then route native desktop requests through a provider adapter if the CLI path proves useful. Do not claim the component checks prove full routine completion or that this replaces the native desktop UI.
 
 No broad test suite or extension rebuild is required for this skill-only installation. Existing sessions may need a fresh Raya conversation/backend reload to discover newly installed global skills.

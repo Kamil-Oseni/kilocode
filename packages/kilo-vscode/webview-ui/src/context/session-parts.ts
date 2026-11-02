@@ -18,7 +18,11 @@ export function sameParts(local: Part[] = [], snapshot: Part[] = []): boolean {
   for (const [i, part] of snapshot.entries()) {
     const current = local[i]!
     if (current.id !== part.id || current.type !== part.type) return false
-    if (!stream(current) || !stream(part)) continue
+    if (!stream(current) || !stream(part)) {
+      // Tool status/output and attachment metadata can change without a new id.
+      if (JSON.stringify(current) !== JSON.stringify(part)) return false
+      continue
+    }
     if (current.text !== part.text) return false
     if (current.time?.end !== part.time?.end) return false
   }

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { mergeMessages, sameReconcileShape } from "../../webview-ui/src/context/session-merge"
 import { reconcileQueued } from "../../webview-ui/src/context/session-queue"
-import type { Message } from "../../webview-ui/src/types/messages"
+import type { Message, Part } from "../../webview-ui/src/types/messages"
 
 const user: Message = { id: "user", sessionID: "session", role: "user", createdAt: "2026-10-05T02:17:40Z" }
 const reply: Message = {
@@ -55,4 +55,25 @@ test("identical terminal metadata and parts preserve the existing fast path", ()
   const current = [user, { ...reply, finish: "stop", error: { name: "UnknownError", data: { message: "synthetic" } } }]
   const incoming = structuredClone(current)
   expect(sameReconcileShape(current, incoming, () => [])).toBe(true)
+})
+
+test("same-id tool completion heals an unfinished turn without releasing its queued parent", () => {
+  const pending: Part = {
+    id: "tool",
+    messageID: reply.id,
+    type: "tool",
+    tool: "task",
+    state: { status: "pending", input: {} },
+  }
+  const completed: Part = {
+    ...pending,
+    state: { status: "completed", input: {}, output: "Worker finished", title: "Task", metadata: {} },
+  }
+  const current = [user, { ...reply, parts: [pending] }]
+  const incoming = [user, { ...reply, parts: [completed] }]
+  expect(sameReconcileShape(current, incoming, (id) => (id === reply.id ? [pending] : []))).toBe(false)
+  expect(reconcileQueued(mergeMessages(current, incoming, "reconcile"), [user.id])).toEqual([user.id])
+  expect(sameReconcileShape(incoming, structuredClone(incoming), (id) => (id === reply.id ? [completed] : []))).toBe(
+    true,
+  )
 })

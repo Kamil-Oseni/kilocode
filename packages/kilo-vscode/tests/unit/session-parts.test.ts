@@ -125,6 +125,30 @@ describe("mergeOptimisticPart", () => {
 describe("sameParts", () => {
   it("accepts equal hydrated and snapshot parts", () => {
     expect(sameParts([text("p1", "done", { end: 2 })], [text("p1", "done", { end: 2 })])).toBe(true)
+    const parts = [tool("tool"), file("file")]
+    expect(sameParts(parts, structuredClone(parts))).toBe(true)
+  })
+
+  it("reconciles same-id tool completion, output corrections, and attachment metadata", () => {
+    const pending = tool("tool")
+    const completed: Part = {
+      ...pending,
+      type: "tool",
+      tool: "bash",
+      state: {
+        status: "completed",
+        input: {},
+        output: "first",
+        title: "Done",
+        metadata: {},
+      },
+    }
+    const corrected: Part = { ...completed, state: { ...completed.state, output: "corrected" } }
+    expect(sameParts([pending], [completed])).toBe(false)
+    expect(mergeParts([pending], [completed], 10)).toEqual([completed])
+    expect(sameParts([completed], [corrected])).toBe(false)
+    expect(mergeParts([completed], [corrected], 10)).toEqual([corrected])
+    expect(sameParts([file("file")], [{ ...file("file"), url: "data:,corrected" }])).toBe(false)
   })
 
   it("rejects same-count snapshots with different ids, text, or completion state", () => {

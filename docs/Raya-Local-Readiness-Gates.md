@@ -1,3 +1,9 @@
+November 1, 2026 -- Delivery blocked by unstable RAM after source validation
+
+Current source includes the standing-parent evidence/wait repair and passed the two native parent lifecycle cases with 88 assertions. Partial source review for fc9335b1e0 is saved in .tmp/new-pc/worker-fc9335b1e0-source-reviewed.json; it explicitly retains incomplete type validation. The stock candidate build declined admission before launching at 7.84 GiB free, below its 9 GiB admission requirement with a 6 GiB reserve. No candidate package or new installation was produced. All owned test/model jobs are terminal with joined readers and empty native families; protected user apps remain open.
+
+The same resource condition has prevented delivery across three consecutive goal turns. Source repairs and evidence are saved; stable RAM headroom is required for remaining compiler, package and live-worker validation. Installed Raya remains eb9e21404d. Verified broad components remain 3/9 (33.3%); overall readiness is unmeasured.
+
 November 1, 2026 -- Source Routine Stop, budget and standing-evidence repairs
 
 Source `d4a2f68fd0` repairs required-child cancellation when a waiting native parent is stopped; `102eb13f84` repairs authenticated standing-budget double counting. Their causal source cases passed 40 and 18 assertions respectively. A third defect prevented a genuine standing parent from verifying or waiting for its child because it had no incoming delegation. Source `a04b23b1ba` now authenticates that parent's current Run, Goal, session, startup snapshot, organization revision, membership and policy, plus its native child's null parent pointer and exact workspace/receipt. Child artifacts remain evidence, without granting the parent write ownership.

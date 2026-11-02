@@ -12,22 +12,35 @@ const text = tool.schema.string().min(1).max(512)
 
 function run(binary: string, args: string[], signal?: AbortSignal) {
   return new Promise<Record<string, unknown>>((resolve, reject) => {
-    const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^AGENT_DESKTOP_(SESSION|AGENT_ID|TRACE|HEADED)$/i.test(key)))
-    execFile(binary, args, { windowsHide: true, signal, env, timeout: 20_000, maxBuffer: 1_048_576 }, (_err, stdout) => {
-      // Keep structured delivery refusals even when the CLI exits nonzero.
-      const parsed = tool.schema
-        .object({ version: tool.schema.literal("2.5"), ok: tool.schema.boolean() })
-        .passthrough()
-        .safeParse((() => {
-          try {
-            return JSON.parse(stdout)
-          } catch {
-            return undefined
-          }
-        })())
-      if (parsed.success) return resolve(parsed.data)
-      reject(new Error("Background desktop result is unknown because the CLI response is missing or invalid; inspect before retrying"))
-    })
+    const env = Object.fromEntries(
+      Object.entries(process.env).filter(([key]) => !/^AGENT_DESKTOP_(SESSION|AGENT_ID|TRACE|HEADED)$/i.test(key)),
+    )
+    execFile(
+      binary,
+      args,
+      { windowsHide: true, signal, env, timeout: 20_000, maxBuffer: 1_048_576 },
+      (_err, stdout) => {
+        // Keep structured delivery refusals even when the CLI exits nonzero.
+        const parsed = tool.schema
+          .object({ version: tool.schema.literal("2.5"), ok: tool.schema.boolean() })
+          .passthrough()
+          .safeParse(
+            (() => {
+              try {
+                return JSON.parse(stdout)
+              } catch {
+                return undefined
+              }
+            })(),
+          )
+        if (parsed.success) return resolve(parsed.data)
+        reject(
+          new Error(
+            "Background desktop result is unknown because the CLI response is missing or invalid; inspect before retrying",
+          ),
+        )
+      },
+    )
   })
 }
 
@@ -67,7 +80,9 @@ export default tool({
     if (args.action !== "set_value" && args.value !== undefined) throw new Error("Value is only valid for set_value")
     ctx.abort.throwIfAborted()
     const root = process.env.KILO_CONFIG_DIR ?? path.join(homedir(), ".config", "kilo")
-    const cfg = object(JSON.parse(await readFile(path.join(root, "skills", "raya-agent-desktop", "install.json"), "utf8")))
+    const cfg = object(
+      JSON.parse(await readFile(path.join(root, "skills", "raya-agent-desktop", "install.json"), "utf8")),
+    )
     if (
       cfg.provider !== "vercel-labs/agent-desktop" ||
       cfg.version !== "1.0.2" ||
@@ -77,13 +92,24 @@ export default tool({
     )
       throw new Error("Reviewed Agent Desktop installation is unavailable")
     const binary = cfg.binary
-    if (createHash("sha256").update(await readFile(binary)).digest("hex") !== cfg.binarySHA256)
+    if (
+      createHash("sha256")
+        .update(await readFile(binary))
+        .digest("hex") !== cfg.binarySHA256
+    )
       throw new Error("Agent Desktop binary differs from the reviewed installation")
     await ctx.ask({
       permission: "background_desktop",
       patterns: [`${args.app}/${args.window ?? "inventory"}/${args.action}`],
       always: [],
-      metadata: { app: args.app, window: args.window, title: args.title, action: args.action, role: args.role, name: args.name },
+      metadata: {
+        app: args.app,
+        window: args.window,
+        title: args.title,
+        action: args.action,
+        role: args.role,
+        name: args.name,
+      },
     })
     ctx.abort.throwIfAborted()
     const key = args.window ?? `inventory:${args.app}`
@@ -106,17 +132,35 @@ export default tool({
         result = await run(binary, ["list-windows", `--app=${args.app}`, ...scoped], ctx.abort)
       }
       if (args.action !== "windows") {
-        const snapshot = () => run(binary, ["snapshot", `--window-id=${args.window}`, "--timeout-ms", "5000", ...scoped], ctx.abort)
+        const snapshot = () =>
+          run(binary, ["snapshot", `--window-id=${args.window}`, "--timeout-ms", "5000", ...scoped], ctx.abort)
         const before = await snapshot()
         const data = object(before.data)
         const window = object(data.window)
-        if (before.ok !== true || data.complete !== true || window.id !== args.window || window.title !== args.title || data.app !== args.app)
+        if (
+          before.ok !== true ||
+          data.complete !== true ||
+          window.id !== args.window ||
+          window.title !== args.title ||
+          data.app !== args.app
+        )
           throw new Error("The selected app/window changed or its accessibility snapshot is incomplete")
         if (args.action === "snapshot") result = before
         if (args.action === "click" || args.action === "set_value") {
           const found = refs(data.tree, args.role!, args.name!)
-          if (found.length !== 1) throw new Error(`Expected one observed control; found ${found.length}. Take a fresh snapshot`)
-          const action = await run(binary, [args.action === "click" ? "click" : "set-value", ...scoped, "--", found[0], ...(args.action === "set_value" ? [args.value!] : [])], ctx.abort)
+          if (found.length !== 1)
+            throw new Error(`Expected one observed control; found ${found.length}. Take a fresh snapshot`)
+          const action = await run(
+            binary,
+            [
+              args.action === "click" ? "click" : "set-value",
+              ...scoped,
+              "--",
+              found[0],
+              ...(args.action === "set_value" ? [args.value!] : []),
+            ],
+            ctx.abort,
+          )
           // Invocation can be delivered without verification. Preserve that receipt,
           // then observe exactly once; never replay a click or field write.
           result = { action }
@@ -137,7 +181,12 @@ export default tool({
       locks.delete(key)
     }
     if (failure)
-      return JSON.stringify({ ok: false, error: failure instanceof Error ? failure.message : String(failure), result, cleanup })
+      return JSON.stringify({
+        ok: false,
+        error: failure instanceof Error ? failure.message : String(failure),
+        result,
+        cleanup,
+      })
     const action = object(result?.action)
     const readback = object(result?.readback)
     const ok = cleanup?.ok === true && (result?.ok === true || (action.ok === true && readback.ok === true))

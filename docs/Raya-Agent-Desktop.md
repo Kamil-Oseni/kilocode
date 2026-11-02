@@ -1,6 +1,6 @@
 # Vercel Agent Desktop for Raya
 
-Installed on 2026-11-01 as an optional on-demand CLI skill. The existing native desktop panel, input driver and permission system remain unchanged. The earlier routine/build goal remains paused.
+Installed on 2026-11-01 as an optional on-demand CLI skill. The existing native desktop panel, input driver and permission system remain unchanged. The user subsequently resumed routine work with a constraint to preserve RAM for Claude and Node.
 
 ## Installed components
 
@@ -38,7 +38,17 @@ Skills load on demand, keeping the full desktop manual out of ordinary conversat
 
 ## Remaining integration
 
-Run one authorized background app task through Raya and verify saved output, no user focus/mouse disruption, cancellation and session cleanup. Then route native desktop requests through a provider adapter if the CLI path proves useful. Do not claim that discovery/session checks prove full worker task completion or that this replaces the native desktop UI.
+### Practical background check
+
+One small native WinForms process exposed two disposable windows. Two distinct worker IDs in one multi-agent session concurrently set different fields through `ValuePattern.SetValue`, then clicked their own Save buttons through `InvokePattern.Invoke`. Both field writes returned `delivered_verified`. Save clicks returned `delivered_unverified`; fresh UI snapshots showed the correct Saved labels, and independent file reads confirmed the exact two outputs.
+
+The fixture recorded the same unrelated foreground window at launch, edit and save for both windows. No headed or physical-synthetic action was used. Continuous foreground state and physical pointer position were not sampled, so this is bounded evidence rather than a guarantee for every application.
+
+Observed resident memory: two cursor processes approximately 21.5 MB combined; the fixture approximately 36.7 MB. Free system RAM was 10.59 GiB during the check. These are point observations, not peak or production workload measurements. Both windows closed through observed semantic refs, the session ended and no fixture/cursor processes remained. Claude, Node, VM and model processes were not changed.
+
+Local evidence is retained at `.tmp/agent-desktop-live-20261101/result.json`, with hashes of saved files, UI readbacks, click receipts and foreground event logs. This check used CLI worker identities, not two LLM-driven Raya workers. It does not prove native panel integration, app-independent reliability or cancellation of an in-flight action.
+
+Run one authorized background app task through Raya's actual worker routing and verify saved output, cancellation and cleanup. Then route native desktop requests through a provider adapter if the CLI path proves useful. Do not claim the component checks prove full routine completion or that this replaces the native desktop UI.
 
 No broad test suite or extension rebuild is required for this skill-only installation. Existing sessions may need a fresh Raya conversation/backend reload to discover newly installed global skills.
 

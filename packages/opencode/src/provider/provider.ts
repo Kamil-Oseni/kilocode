@@ -1830,6 +1830,7 @@ const layer = Layer.effect(
             localInferenceToolFormat: options["localInferenceToolFormat"],
             localInferenceContext: options["localInferenceContext"], // kilocode_change - explicit context must agree with the configured model window
             localInferenceKeepAlive: options["localInferenceKeepAlive"], // kilocode_change - explicit native residency budget
+            localInferenceMmap: options["localInferenceMmap"], // kilocode_change - explicit native memory mapping
           },
           model,
         ) // kilocode_change - bind local model context before SDK cache selection
@@ -1853,6 +1854,7 @@ const layer = Layer.effect(
         delete options["localInferenceToolFormat"] // kilocode_change - keep bridge capability out of SDK options
         delete options["localInferenceContext"] // kilocode_change - keep native context metadata out of SDK options
         delete options["localInferenceKeepAlive"] // kilocode_change - keep native residency metadata out of SDK options
+        delete options["localInferenceMmap"] // kilocode_change - keep native memory mapping metadata out of SDK options
         const chunkTimeout = options["chunkTimeout"]
         const headerTimeout = options["headerTimeout"]
         delete options["chunkTimeout"]

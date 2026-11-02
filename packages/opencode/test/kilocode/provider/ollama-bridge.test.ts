@@ -4,6 +4,52 @@ import { localFetch, status } from "@/kilocode/provider/local-scheduler"
 import { terminal } from "@/kilocode/provider/native-admission"
 import { ToolEnvelope } from "@/kilocode/provider/tool-envelope"
 
+test("explicit mmap is preserved for stream and nonstream requests without extra dispatch", async () => {
+  const rows: Record<string, unknown>[] = []
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(req) {
+      const row = await req.json()
+      rows.push(row)
+      const body = { model: "fixture", message: { role: "assistant", content: "Ready." }, done: true }
+      return row.stream ? new Response(JSON.stringify(body) + "\n") : Response.json(body)
+    },
+  })
+  try {
+    for (const stream of [false, true])
+      for (const mmap of [true, false, undefined]) {
+        const fetcher = ollama(
+          {
+            localInference: true,
+            localInferenceAPI: "ollama",
+            ...(mmap !== undefined ? { localInferenceMmap: mmap } : {}),
+          },
+          globalThis.fetch,
+        )
+        const count = rows.length
+        const response = await fetcher(`${server.url}v1/chat/completions`, {
+          method: "POST",
+          body: JSON.stringify({ model: "fixture", messages: [{ role: "user", content: "Hello" }], stream }),
+        })
+        expect(response.ok).toBe(true)
+        expect(await response.text()).toContain("Ready.")
+        expect(rows).toHaveLength(count + 1)
+        expect(rows.at(-1)?.options).toEqual(mmap === undefined ? {} : { use_mmap: mmap })
+        expect(rows.at(-1)?.shift).toBe(false)
+        expect(rows.at(-1)?.truncate).toBe(false)
+        expect(rows.at(-1)?.stream).toBe(stream)
+      }
+    for (const mmap of [null, 0, 1, "true", "false", {}, []])
+      expect(() =>
+        ollama({ localInference: true, localInferenceAPI: "ollama", localInferenceMmap: mmap }, globalThis.fetch),
+      ).toThrow(OllamaBridgeError)
+    expect(rows).toHaveLength(6)
+  } finally {
+    await server.stop(true)
+  }
+})
+
 for (const disabled of [false, true]) {
   test(`local envelope final text retains reply guidance after tools are ${disabled ? "disabled" : "removed"}`, async () => {
     const rows: Record<string, unknown>[] = []

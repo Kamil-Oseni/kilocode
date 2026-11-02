@@ -574,6 +574,7 @@ export function ollama(options: Readonly<Record<string, unknown>>, fetcher: Fetc
   if (options.localInferenceAPI !== "ollama" || options.localInference !== true) throw new OllamaBridgeError()
   const context = options.localInferenceContext
   const idle = options.localInferenceKeepAlive
+  const mmap = options.localInferenceMmap
   if (
     context !== undefined &&
     (typeof context !== "number" || !Number.isSafeInteger(context) || context < 2048 || context > 262144)
@@ -583,6 +584,7 @@ export function ollama(options: Readonly<Record<string, unknown>>, fetcher: Fetc
     throw new OllamaBridgeError()
   if (idle !== undefined && (typeof idle !== "number" || !Number.isSafeInteger(idle) || idle < 0 || idle > 600))
     throw new OllamaBridgeError()
+  if (mmap !== undefined && typeof mmap !== "boolean") throw new OllamaBridgeError()
   if (options.localInferenceToolFormat !== undefined && options.localInferenceToolFormat !== "completion-envelope-v1")
     throw new OllamaBridgeError()
   return async (input, init) => {
@@ -687,6 +689,7 @@ export function ollama(options: Readonly<Record<string, unknown>>, fetcher: Fetc
         ...(data.response_format?.type === "json_object" ? { format: "json" } : {}),
         ...(data.response_format?.type === "json_schema" ? { format: data.response_format.json_schema.schema } : {}),
         options: {
+          ...(mmap !== undefined ? { use_mmap: mmap } : {}),
           ...(options.ollamaContext !== undefined || context !== undefined
             ? { num_ctx: options.ollamaContext ?? context }
             : {}),

@@ -168,8 +168,8 @@ Current gate summary for the installed build; earlier dated entries retain their
 
 | Gate | Status | Evidence or remaining work |
 |---|---|---|
-| Audited combined candidate | Verified for installed eb9e21404d | Exact source-qualified CLI/helper/package installed; stock target and wrapper cleanup outcomes retained separately. |
-| Normal installation preservation | Verified for installed eb9e21404d | Preserved 7,132 saved files and unrelated registrations through qualified before/after checks. Fresh ordinary-trial startup and nine-definition/89-Run baseline remain separate; loaded UI recovery remains separate. |
+| Audited combined candidate | Verified for installed 416b437ad0 | Exact source-qualified CLI/helper/package installed; stock target and wrapper cleanup outcomes retained separately. |
+| Normal installation preservation | Verified for installed 416b437ad0 | Preserved 7,138 saved files and unrelated registrations through qualified before/after checks. Fresh ordinary-trial startup and nine-definition/89-Run baseline remain separate; loaded UI recovery remains separate. |
 | Installed local General/tool turn | Pending | Installed 1e18 conversation-only recall remains accepted; current b7a7 GET-only upgrade preserved its 12 messages/26 parts without a model run or counter repair. Loaded UI/drafts/model, large-chat behavior and loaded reopen remain pending. |
 | Strict installed Coder | Verified component on ead06c59b8 | Earlier local Code9B edit/native tests/final result retained without another model run. |
 | Installed Voice and permitted HA flow | Deferred by user | Voice is secondary; Home Assistant remains off. |

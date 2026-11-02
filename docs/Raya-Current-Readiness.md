@@ -1,3 +1,11 @@
+November 1, 2026 -- Source mapped-loading support; Routine run remains memory-limited
+
+Source commit `bc7a943e01` preserves an explicitly configured boolean Ollama mapped-loading option through native requests, including streaming and nonstreaming calls. The focused regression passed 50 assertions; scoped lint and the shared-source annotation guard passed. An absent option keeps existing behavior. This is source-only qualification: full CLI typecheck, packaging and installed validation remain pending for this change. The installed build remains `eb9e21404d`.
+
+Two controlled local 9B preloads (`mmap-runtime-20261101-v1` and `v3`) were stopped by the 6 GiB free-RAM reserve before the model became ready; `v2` declined admission without starting a child. Both original owners were joined with exit one, their owned families are empty and readers joined. The v3 working-set trim reduced the runner's resident set from roughly 319 MB to 16 MB but reclaimed only about 20 MB of available RAM, so it did not establish a usable fit or the cause of memory elsewhere. All model processes started for these attempts are gone. No Raya session or Run was created; the saved Run count remains 89. Claude, Node and the user's other apps were preserved. No further memory prototypes or model/config changes are planned for this retry.
+
+The prepared real three-worker workflow has not started. Broad components remain **3/9 (33.3%)**, overall readiness **unmeasured**; no installed mapped-loading or new business-workflow pass is claimed. Stable chat and Routine workers remain the priority; voice stays deferred.
+
 October 31, 2026 -- Installed admission guards and read recovery qualified
 
 Installed `eb9e21404d` (`7.4.23-snapshot+eb9e21404d.local.1793465994283`) now contains the explicit top-level/slash-separated omission guard, the required native contract admission guard, direct-read acknowledgement/recovery and current-input instruction priority fixes. The qualified delivery binds the exact CLI, helper and package to source qualification `3a4bac05563e2514ed0c26c6c04b8fe56c2b8e085aaeffb3cddb9ed55828f48b`. Combined CLI typecheck passed in 47.625 seconds.

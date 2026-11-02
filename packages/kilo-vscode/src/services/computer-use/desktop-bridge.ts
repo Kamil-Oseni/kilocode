@@ -75,6 +75,10 @@ type WindowsRequest = Extract<DesktopRequest, { operation: "windows" }>
 type AuthorizeRequest = Extract<DesktopRequest, { operation: "authorize" }>
 type AuthorizeResult = Extract<DesktopResult, { operation: "authorize" }>
 type BackgroundRequest = Extract<DesktopRequest, { operation: "background_snapshot" | "background_action" }>
+type BackgroundProbe = {
+  verify(target: { windowID: string; identity: string }, owner?: { pid: number; instance: string }): Promise<string>
+  close(): Promise<boolean>
+}
 type PassiveRequest =
   | CaptureRequest
   | WindowsRequest
@@ -185,6 +189,7 @@ class DesktopAuthorizationRefusal extends Error {
 
 export class DesktopBridge {
   private readonly active = new Map<string, AbortController>()
+  private readonly backgrounds = new Set<string>()
   private readonly receipts = new Map<string, Receipt>()
   private readonly offEvent: () => void
   private readonly offState: () => void
@@ -216,6 +221,7 @@ export class DesktopBridge {
     private readonly authorize?: (request: AuthorizeRequest) => Promise<AuthorizeResult>,
     private readonly validate?: (request: AuthorizeRequest) => AuthorizeResult,
     private readonly background?: Pick<DesktopBackgroundHost, "execute">,
+    private readonly probe?: (signal: AbortSignal) => BackgroundProbe,
   ) {
     this.restore()
     this.offEvent = connection.onEvent((event, directory) => this.event(event, directory))
@@ -227,8 +233,10 @@ export class DesktopBridge {
     if (value.type === "kilocode.desktop.cancelled") {
       const controller = this.active.get(value.properties.requestID)
       controller?.abort()
-      this.active.delete(value.properties.requestID)
-      if (controller) this.session.takeControl("The agent desktop observation was cancelled.")
+      if (controller && !this.backgrounds.has(value.properties.requestID)) {
+        this.active.delete(value.properties.requestID)
+        this.session.takeControl("The agent desktop observation was cancelled.")
+      }
       return
     }
     if (value.type !== "kilocode.desktop.requested" || !directory) return
@@ -248,9 +256,10 @@ export class DesktopBridge {
     if (!this.connected || (state !== "disconnected" && state !== "error")) return
     this.connected = false
     this.revision += 1
+    const foreground = [...this.active.keys()].some((id) => !this.backgrounds.has(id))
     for (const controller of this.active.values()) controller.abort()
     this.active.clear()
-    this.session.takeControl("Raya disconnected. Resume desktop control after reconnecting.")
+    if (foreground) this.session.takeControl("Raya disconnected. Resume desktop control after reconnecting.")
   }
 
   private async recover(revision: number): Promise<void> {
@@ -318,14 +327,18 @@ export class DesktopBridge {
     const startedAt = Date.now()
     let dispatched = false
     let settled = false
+    const background = request.operation === "background_snapshot" || request.operation === "background_action"
+    let retired = true
     let interrupted: Promise<void> | undefined
     const onAbort = () => {
-      if (!dispatched || settled) return
+      if ((!dispatched && !background) || settled) return
       settled = true
       receipt.failure = {
         code: "cancelled",
-        message:
-          "Desktop control stopped after native dispatch began. The outcome is unknown and will not be replayed.",
+        ...(background ? { hostRetired: retired } : {}),
+        message: dispatched
+          ? "Desktop control stopped after native dispatch began. The outcome is unknown and will not be replayed."
+          : "Desktop control stopped before action dispatch. This request will not be replayed.",
         receipt: {
           version: 1,
           requestID: request.id,
@@ -336,13 +349,24 @@ export class DesktopBridge {
           ...ground(request),
         },
       }
-      this.record(request, fingerprint, "post_dispatch", "unknown", startedAt, receipt.failure.receipt!.finishedAt)
+      this.record(
+        request,
+        fingerprint,
+        dispatched ? "post_dispatch" : "pre_dispatch",
+        dispatched ? "unknown" : "cancelled",
+        startedAt,
+        receipt.failure.receipt!.finishedAt,
+      )
       interrupted = this.retain(receipt)
         .catch((error) => console.error("[Raya] Interrupted desktop receipt persistence failed", error))
         .then(() => this.deliver(request.id, directory, receipt))
     }
-    controller.signal.addEventListener("abort", onAbort, { once: true })
+    const abort = () => {
+      if (!background) onAbort()
+    }
+    controller.signal.addEventListener("abort", abort, { once: true })
     this.active.set(request.id, controller)
+    if (background) this.backgrounds.add(request.id)
     try {
       const result = await this.dispatch(
         request,
@@ -355,8 +379,12 @@ export class DesktopBridge {
           dispatched = true
         },
         (event) => this.nativeEvent(request, fingerprint, event),
+        (value) => {
+          retired = value
+        },
       )
       if (controller.signal.aborted) {
+        if (background) onAbort()
         await interrupted
         return
       }
@@ -365,14 +393,25 @@ export class DesktopBridge {
     } catch (error) {
       if (controller.signal.aborted) {
         if (!dispatched) await this.preEvent(request, fingerprint, "cancelled", startedAt)
+        if (background) onAbort()
         await interrupted
         return
       }
       settled = true
-      await this.fail(request, directory, fingerprint, receipt, error, startedAt, dispatched)
+      await this.fail(
+        request,
+        directory,
+        fingerprint,
+        receipt,
+        error,
+        startedAt,
+        dispatched,
+        background ? retired : undefined,
+      )
     } finally {
-      controller.signal.removeEventListener("abort", onAbort)
+      controller.signal.removeEventListener("abort", abort)
       if (this.active.get(request.id) === controller) this.active.delete(request.id)
+      this.backgrounds.delete(request.id)
     }
   }
 
@@ -429,6 +468,7 @@ export class DesktopBridge {
     error: unknown,
     startedAt: number,
     dispatched: boolean,
+    retired?: boolean,
   ): Promise<void> {
     const unsent = error instanceof NativeInputPreflightError
     const uncertain = !unsent && (dispatched || error instanceof DesktopOutcomeError)
@@ -436,6 +476,7 @@ export class DesktopBridge {
       await this.preEvent(request, fingerprint, "refused", startedAt)
     receipt.failure = {
       code: "invalid_request",
+      ...(retired === undefined ? {} : { hostRetired: retired }),
       message: (error instanceof Error ? error.message : String(error)).slice(0, 10_000),
       ...(uncertain
         ? {
@@ -451,7 +492,8 @@ export class DesktopBridge {
           }
         : {}),
     }
-    if (uncertain) this.session.takeControl("A desktop action had an uncertain outcome. Inspect it before resuming.")
+    if (uncertain && retired === undefined)
+      this.session.takeControl("A desktop action had an uncertain outcome. Inspect it before resuming.")
     if (uncertain)
       this.record(request, fingerprint, "post_dispatch", "unknown", startedAt, receipt.failure.receipt!.finishedAt)
     await this.retain(receipt).catch((err) =>
@@ -544,6 +586,7 @@ export class DesktopBridge {
     signal: AbortSignal,
     onDispatch: () => void,
     onNative: (event: DesktopNativeDispatch) => Promise<void>,
+    retirement: (value: boolean) => void,
   ): Promise<DesktopResult> {
     if (request.operation === "authorize")
       return (
@@ -555,7 +598,7 @@ export class DesktopBridge {
     enforce(decision, request.authorization)
     if (request.operation === "windows") return this.windows(request, startedAt, decision)
     if (request.operation === "background_snapshot" || request.operation === "background_action")
-      return this.backgroundRequest(request, startedAt, signal, onDispatch, onNative, decision)
+      return this.backgroundRequest(request, startedAt, signal, onDispatch, onNative, retirement, decision)
     if (request.operation === "observe" || request.operation === "watch")
       return this.observe(request, startedAt, signal, decision)
     return this.interact(request, startedAt, onDispatch, onNative)
@@ -567,6 +610,7 @@ export class DesktopBridge {
     signal: AbortSignal,
     onDispatch: () => void,
     onNative: (event: DesktopNativeDispatch) => Promise<void>,
+    retirement: (value: boolean) => void,
     decision?: AuthorizeResult,
   ): Promise<DesktopResult> {
     if (!this.background) throw new Error("Background desktop provider is unavailable")
@@ -578,17 +622,25 @@ export class DesktopBridge {
     let observation: string | undefined
     let reserved = false
     const native = { session: request.sessionID, request: request.id, sequence: 1 }
+    const probe = this.probe?.(signal)
+    let joined = !probe
+    const verify = async (owner?: { pid: number; instance: string }) => {
+      if (probe) {
+        observation = await probe.verify(target, owner)
+        return
+      }
+      await this.session.verify(window, identity)
+      const inventory = await this.session.windows()
+      const actual = inventory.windows.find((item) => item.windowID === window)
+      if (!actual || actual.identity !== identity || (owner && owner.pid !== actual.processID))
+        throw new Error("Background window owner changed or differs from the native grant")
+      observation = inventory.observation.id
+    }
+    retirement(false)
     const result = await this.background.execute(
       semantic(request, target),
       {
-        verify: async (target, owner) => {
-          await this.session.verify(target.windowID, target.identity)
-          const inventory = await this.session.windows()
-          const actual = inventory.windows.find((item) => item.windowID === target.windowID)
-          if (!actual || actual.identity !== target.identity || (owner && owner.pid !== actual.processID))
-            throw new Error("Background window owner changed or differs from the native grant")
-          observation = inventory.observation.id
-        },
+        verify: async (_target, owner) => verify(owner),
         authorize: async (action, control) => {
           const sensitive =
             request.operation === "background_action" && action !== "observe" ? request.sensitive : false
@@ -603,13 +655,17 @@ export class DesktopBridge {
         dispatch: async () => {
           await onNative({ phase: "reserved", identity: native })
           reserved = true
-          await this.session.verify(window, identity)
+          await verify()
           signal.throwIfAborted()
           onDispatch()
         },
       },
       signal,
-    )
+    ).finally(async () => {
+      if (probe) joined = await probe.close()
+    })
+    const retired = result.drained && joined
+    retirement(retired)
     const proof = outcome(result, request.operation === "background_snapshot")
     if (reserved)
       await onNative({
@@ -624,6 +680,7 @@ export class DesktopBridge {
       throw new DesktopAuthorizationRefusal(result.failure ?? "Background desktop refused before action delivery")
     return {
       operation: request.operation,
+      hostRetired: retired,
       output: JSON.stringify(result),
       receipt: {
         version: 1,
@@ -983,10 +1040,12 @@ export class DesktopBridge {
   private scrub(receipt: Receipt): void {
     if (receipt.result?.operation !== "sequence" && receipt.result?.operation !== "background_action") return
     const background = receipt.result.operation === "background_action"
+    const retired = background ? receipt.result.hostRetired : undefined
     const proof = receipt.result.receipt
     receipt.result = undefined
     receipt.failure = {
       code: "invalid_request",
+      ...(retired === undefined ? {} : { hostRetired: retired }),
       message: background
         ? "The background desktop action ran, but its application content is not retained after delivery. It will not be replayed; observe the target before continuing."
         : "The desktop sequence ran, but its final frame is not retained after delivery. It will not be replayed; observe the desktop before continuing.",
@@ -1253,6 +1312,7 @@ export class DesktopBridge {
               ? {
                   failure: {
                     code: "invalid_request" as const,
+                    ...(value.result.operation === "background_action" ? { hostRetired: value.result.hostRetired } : {}),
                     message:
                       value.result.operation === "background_action"
                         ? "The background desktop action ran, but its application content is not retained after restart. It will not be replayed; observe the target before continuing."

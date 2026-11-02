@@ -5,11 +5,89 @@ import { ObservationID } from "@/kilocode/computer-use/protocol"
 import { Event, type Request } from "@/kilocode/desktop/protocol"
 import { Desktop, HostError } from "@/kilocode/desktop/service"
 import { SessionID } from "@/session/schema"
-import { Effect, Fiber, Layer, Queue } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, Queue } from "effect"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(Desktop.layer("100 millis").pipe(Layer.provideMerge(Bus.layer)))
+const it = testEffect(Desktop.layer("100 millis", "100 millis").pipe(Layer.provideMerge(Bus.layer)))
 const sessionID = SessionID.make("ses_desktop_test")
+
+it.instance(
+  "joins background cancellation only after explicit host retirement and refuses unconfirmed cleanup",
+  () =>
+    Effect.gen(function* () {
+      const desktop = yield* Desktop.Service
+      const bus = yield* Bus.Service
+      const events = yield* Queue.unbounded<Request>()
+      const cancellations = yield* Queue.unbounded<string>()
+      const off = yield* bus.subscribeCallback(Event.Requested, (event) => Queue.offerUnsafe(events, event.properties))
+      const stop = yield* bus.subscribeCallback(Event.Cancelled, (event) =>
+        Queue.offerUnsafe(cancellations, event.properties.requestID),
+      )
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          off()
+          stop()
+        }),
+      )
+      for (const mode of ["confirmed", "interrupt", "false", "missing", "timeout"] as const) {
+        const confirmed = mode === "confirmed" || mode === "interrupt"
+        const fiber = yield* desktop
+          .request({ operation: "background_snapshot", sessionID, target: { version: 1, windowID: "0x123" } })
+          .pipe(Effect.forkChild)
+        const request = yield* Queue.take(events)
+        const done = yield* Deferred.make<void>()
+        const cancellation = yield* (
+          mode === "interrupt" ? Fiber.interrupt(fiber).pipe(Effect.asVoid) : desktop.cancelSession(sessionID)
+        ).pipe(Effect.ensuring(Deferred.succeed(done, undefined)), Effect.forkChild)
+        expect(yield* Queue.take(cancellations)).toBe(request.id)
+        expect(yield* Deferred.isDone(done)).toBe(false)
+        expect(yield* desktop.list()).toEqual([])
+        if (mode !== "timeout")
+          yield* desktop.reject({
+            requestID: request.id,
+            error: {
+              code: "cancelled",
+              message: "Host cancelled the request",
+              ...(mode === "missing" ? {} : { hostRetired: confirmed }),
+            },
+          })
+        const result = yield* Fiber.await(cancellation)
+        expect(Exit.isSuccess(result)).toBe(confirmed)
+        if (Exit.isFailure(result)) expect(Cause.pretty(result.cause)).toContain("retirement is unconfirmed")
+        yield* Fiber.await(fiber)
+        expect(yield* desktop.list()).toEqual([])
+        expect(yield* Queue.size(cancellations)).toBe(0)
+      }
+
+      const fiber = yield* desktop
+        .request({ operation: "background_snapshot", sessionID, target: { version: 1, windowID: "0x123" } })
+        .pipe(Effect.forkChild)
+      const request = yield* Queue.take(events)
+      const caller = yield* Effect.withFiber((current) => Effect.succeed(current.id))
+      yield* desktop.reject({
+        requestID: request.id,
+        error: {
+          code: "cancelled",
+          message: "Host cleanup is unconfirmed",
+          // Interrupt exactly after reject removes pending, before it resolves retirement.
+          get hostRetired() {
+            fiber.interruptUnsafe(caller)
+            return false
+          },
+        },
+      })
+      const result = yield* Fiber.await(fiber)
+      expect(Exit.isFailure(result)).toBe(true)
+      if (Exit.isFailure(result)) {
+        expect(Cause.hasInterrupts(result.cause)).toBe(true)
+        expect(Cause.hasDies(result.cause)).toBe(true)
+        expect(Cause.pretty(result.cause)).toContain("retirement is unconfirmed")
+      }
+      expect(yield* desktop.list()).toEqual([])
+      expect(yield* Queue.size(cancellations)).toBe(0)
+    }),
+  { git: true },
+)
 
 it.instance(
   "publishes, lists, correlates, and completes desktop observations",

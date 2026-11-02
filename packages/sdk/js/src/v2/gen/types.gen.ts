@@ -6866,11 +6866,13 @@ export type DesktopResult =
     }
   | {
       operation: "background_snapshot"
+      hostRetired: boolean
       output: string
       receipt: ComputerUseReceipt
     }
   | {
       operation: "background_action"
+      hostRetired: boolean
       output: string
       receipt: ComputerUseReceipt
     }
@@ -7106,6 +7108,7 @@ export type DesktopResult =
 
 export type DesktopFailure = {
   code: "cancelled" | "disconnected" | "invalid_request" | "timeout" | "unsupported"
+  hostRetired?: boolean
   message: string
   receipt?: ComputerUseReceipt
 }

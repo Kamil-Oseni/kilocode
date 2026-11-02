@@ -441,12 +441,14 @@ export const WindowsResult = Schema.Struct({
 
 export const BackgroundSnapshotResult = Schema.Struct({
   operation: Schema.Literal("background_snapshot"),
+  hostRetired: Schema.Boolean,
   output: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(2_097_152)),
   receipt: Receipt,
 })
 
 export const BackgroundActionResult = Schema.Struct({
   operation: Schema.Literal("background_action"),
+  hostRetired: Schema.Boolean,
   output: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(2_097_152)),
   receipt: Receipt,
 })
@@ -561,6 +563,7 @@ export type ErrorCode = Schema.Schema.Type<typeof ErrorCode>
 
 export const Failure = Schema.Struct({
   code: ErrorCode,
+  hostRetired: Schema.optional(Schema.Boolean),
   message: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(10_000)),
   receipt: Schema.optional(Receipt),
 }).annotate({ identifier: "DesktopFailure" })

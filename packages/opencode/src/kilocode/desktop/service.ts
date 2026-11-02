@@ -32,7 +32,24 @@ export class InvalidReplyError extends Schema.TaggedErrorClass<InvalidReplyError
   requestID: RequestID,
 }) {}
 
-type Entry = { info: Request; deferred: Deferred.Deferred<Result, HostError> }
+type Entry = {
+  info: Request
+  deferred: Deferred.Deferred<Result, HostError>
+  retired: Deferred.Deferred<void, HostError>
+  cancelling?: "cancelled" | "timeout"
+}
+
+function background(info: Request) {
+  return info.operation === "background_snapshot" || info.operation === "background_action"
+}
+
+function unconfirmed() {
+  return new HostError({
+    code: "disconnected",
+    detail:
+      "Background desktop host retirement is unconfirmed; do not assume the computer is quiescent or retry the action.",
+  })
+}
 type State = { pending: Map<RequestID, Entry>; dispose: () => Effect.Effect<void> }
 class StateService extends Context.Service<StateService, State>()("@kilocode/DesktopState") {}
 
@@ -55,7 +72,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@kilocode/Desktop") {}
 
-export function layer(timeout: Duration.Input = "2 minutes") {
+export function layer(timeout: Duration.Input = "2 minutes", retirement: Duration.Input = "45 seconds") {
   return Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -72,13 +89,15 @@ export function layer(timeout: Duration.Input = "2 minutes") {
               const entries = Array.from(pending.values())
               pending.clear()
               for (const entry of entries) {
-                yield* bus
-                  .publish(Event.Cancelled, {
-                    requestID: entry.info.id,
-                    sessionID: entry.info.sessionID,
-                    reason: "disposed" as const,
-                  })
-                  .pipe(Effect.provideService(InstanceRef, instance))
+                if (!entry.cancelling)
+                  yield* bus
+                    .publish(Event.Cancelled, {
+                      requestID: entry.info.id,
+                      sessionID: entry.info.sessionID,
+                      reason: "disposed" as const,
+                    })
+                    .pipe(Effect.provideService(InstanceRef, instance))
+                yield* Deferred.fail(entry.retired, unconfirmed())
                 yield* Deferred.fail(
                   entry.deferred,
                   new HostError({ code: "disconnected", detail: "The desktop host disconnected" }),
@@ -120,7 +139,9 @@ export function layer(timeout: Duration.Input = "2 minutes") {
         const pending = (yield* StateService).pending
         const entry = pending.get(id)
         if (!entry) return
-        pending.delete(id)
+        if (entry.cancelling) return
+        if (background(entry.info)) entry.cancelling = reason
+        if (!background(entry.info)) pending.delete(id)
         yield* bus.publish(Event.Cancelled, { requestID: id, sessionID: entry.info.sessionID, reason })
         yield* Deferred.fail(
           entry.deferred,
@@ -131,12 +152,19 @@ export function layer(timeout: Duration.Input = "2 minutes") {
         )
       })
 
+      const drain = (entry: Entry) =>
+        Deferred.await(entry.retired).pipe(
+          Effect.timeoutOrElse({ duration: retirement, orElse: () => Effect.fail(unconfirmed()) }),
+        )
+
       const request = Effect.fn("Desktop.request")(function* (input: Input) {
         const pending = (yield* StateService).pending
         const id = RequestID.make(Identifier.create("dsr", "ascending"))
         const deferred = yield* Deferred.make<Result, HostError>()
+        const retired = yield* Deferred.make<void, HostError>()
         const info = { ...input, id }
-        pending.set(id, { info, deferred })
+        const entry: Entry = { info, deferred, retired }
+        pending.set(id, entry)
         return yield* Effect.gen(function* () {
           yield* bus.publish(Event.Requested, info)
           return yield* Deferred.await(deferred).pipe(
@@ -145,18 +173,37 @@ export function layer(timeout: Duration.Input = "2 minutes") {
               orElse: () => cancel(id, "timeout").pipe(Effect.andThen(Deferred.await(deferred))),
             }),
           )
-        }).pipe(Effect.ensuring(cancel(id, "cancelled")))
+        }).pipe(
+          Effect.ensuring(
+            Effect.gen(function* () {
+              yield* cancel(id, "cancelled")
+              if (!background(entry.info)) return
+              yield* drain(entry).pipe(Effect.orDie, Effect.ensuring(Effect.sync(() => pending.delete(id))))
+            }),
+          ),
+        )
       })
 
       const list = Effect.fn("Desktop.list")(function* () {
-        return Array.from((yield* StateService).pending.values(), (entry) => entry.info)
+        return Array.from((yield* StateService).pending.values())
+          .filter((entry) => !entry.cancelling)
+          .map((entry) => entry.info)
       })
       const cancelSession = Effect.fn("Desktop.cancelSession")(function* (sessionID: Request["sessionID"]) {
         const pending = (yield* StateService).pending
         const ids = Array.from(pending.values())
           .filter((entry) => entry.info.sessionID === sessionID)
           .map((entry) => entry.info.id)
-        yield* Effect.forEach(ids, (id) => cancel(id, "cancelled"), { discard: true })
+        yield* Effect.forEach(
+          ids,
+          (id) =>
+            Effect.gen(function* () {
+              const entry = pending.get(id)
+              yield* cancel(id, "cancelled")
+              if (entry && background(entry.info)) yield* drain(entry).pipe(Effect.orDie)
+            }),
+          { discard: true },
+        )
       })
       const reply = Effect.fn("Desktop.reply")(function* (input: Parameters<Interface["reply"]>[0]) {
         const pending = (yield* StateService).pending
@@ -165,6 +212,15 @@ export function layer(timeout: Duration.Input = "2 minutes") {
         if (entry.info.operation !== input.result.operation)
           return yield* new InvalidReplyError({ requestID: input.requestID })
         pending.delete(input.requestID)
+        if (background(entry.info)) {
+          const confirmed = "hostRetired" in input.result && input.result.hostRetired === true
+          if (confirmed) yield* Deferred.succeed(entry.retired, undefined)
+          if (!confirmed) {
+            yield* Deferred.fail(entry.retired, unconfirmed())
+            return yield* Deferred.fail(entry.deferred, unconfirmed())
+          }
+          if (entry.cancelling) return
+        }
         return yield* Deferred.succeed(entry.deferred, input.result)
       })
       const reject = Effect.fn("Desktop.reject")(function* (input: Parameters<Interface["reject"]>[0]) {
@@ -172,6 +228,12 @@ export function layer(timeout: Duration.Input = "2 minutes") {
         const entry = pending.get(input.requestID)
         if (!entry) return yield* new NotFoundError({ requestID: input.requestID })
         pending.delete(input.requestID)
+        if (background(entry.info)) {
+          if (input.error.hostRetired === true) yield* Deferred.succeed(entry.retired, undefined)
+          if (input.error.hostRetired !== true) yield* Deferred.fail(entry.retired, unconfirmed())
+          if (entry.cancelling) return
+          if (input.error.hostRetired !== true) return yield* Deferred.fail(entry.deferred, unconfirmed())
+        }
         return yield* Deferred.fail(
           entry.deferred,
           new HostError({ code: input.error.code, detail: input.error.message, receipt: input.error.receipt }),

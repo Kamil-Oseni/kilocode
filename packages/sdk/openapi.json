@@ -103829,6 +103829,9 @@
                 "type": "string",
                 "enum": ["background_snapshot"]
               },
+              "hostRetired": {
+                "type": "boolean"
+              },
               "output": {
                 "type": "string",
                 "minLength": 1,
@@ -103838,7 +103841,7 @@
                 "$ref": "#/components/schemas/ComputerUseReceipt"
               }
             },
-            "required": ["operation", "output", "receipt"],
+            "required": ["operation", "hostRetired", "output", "receipt"],
             "additionalProperties": false
           },
           {
@@ -103848,6 +103851,9 @@
                 "type": "string",
                 "enum": ["background_action"]
               },
+              "hostRetired": {
+                "type": "boolean"
+              },
               "output": {
                 "type": "string",
                 "minLength": 1,
@@ -103857,7 +103863,7 @@
                 "$ref": "#/components/schemas/ComputerUseReceipt"
               }
             },
-            "required": ["operation", "output", "receipt"],
+            "required": ["operation", "hostRetired", "output", "receipt"],
             "additionalProperties": false
           },
           {
@@ -104795,6 +104801,9 @@
           "code": {
             "type": "string",
             "enum": ["cancelled", "disconnected", "invalid_request", "timeout", "unsupported"]
+          },
+          "hostRetired": {
+            "type": "boolean"
           },
           "message": {
             "type": "string",

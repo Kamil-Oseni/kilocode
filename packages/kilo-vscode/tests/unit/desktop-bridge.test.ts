@@ -48,6 +48,7 @@ function setup(
     onCapture?: () => void
     limitFrames?: number
     background?: Pick<DesktopBackgroundHost, "execute">
+    probe?: ConstructorParameters<typeof DesktopBridge>[7]
     native?: {
       outcome: "confirmed" | "refused" | "cancelled" | "unknown"
       code?: string
@@ -229,6 +230,7 @@ function setup(
           }
         : undefined,
     input.background,
+    input.probe,
   )
   return { bridge, session, events, states, replies, rejects, actions, checks, focused, observed: () => observed }
 }
@@ -367,6 +369,85 @@ describe("desktop observation bridge", () => {
         expect(test.replies).toEqual([])
         expect(test.rejects).toContainEqual(expect.objectContaining({ requestID: action.id }))
       }
+      test.bridge.dispose()
+    }
+  })
+
+  it("acknowledges background cancellation only after provider retirement", async () => {
+    for (const [drained, joined] of [[true, true], [false, true], [true, false]] as const) {
+      const grant = await selected("autonomous")
+      const entered = Promise.withResolvers<void>()
+      const cleanup = Promise.withResolvers<void>()
+      const cancelled = Promise.withResolvers<void>()
+      const closing = Promise.withResolvers<void>()
+      const closed = Promise.withResolvers<void>()
+      const test = setup({
+        store: memory(),
+        listed: ["window_2"],
+        listedIdentity: "process_test",
+        validate: (request) => grant.store.authorize(request),
+        probe: () => ({
+          verify: async () => "probe_observation",
+          close: async () => {
+            closing.resolve()
+            await closed.promise
+            return joined
+          },
+        }),
+        background: {
+          execute: async (_input, hooks, signal) => {
+            await hooks.dispatch()
+            signal?.addEventListener("abort", () => cancelled.resolve(), { once: true })
+            entered.resolve()
+            await cleanup.promise
+            return {
+              ok: false,
+              drained,
+              attempted: true,
+              result: undefined,
+              failure: "cancelled",
+              cleanup: { ok: drained },
+            }
+          },
+        },
+      })
+      const action: DesktopRequest = {
+        id: `background_cancel_${drained}`,
+        sessionID: "ses_parent",
+        operation: "background_action",
+        target: { version: 1, windowID: "window_2" },
+        action: "click",
+        role: "button",
+        name: "Save",
+        sensitive: false,
+        authorization: { kind: "prompt" },
+      }
+      for (const listener of test.events)
+        listener({ type: "kilocode.desktop.requested", properties: action } as SSEPayload, "C:\\workspace")
+      await entered.promise
+      for (const listener of test.events)
+        listener(
+          {
+            type: "kilocode.desktop.cancelled",
+            properties: { requestID: action.id, sessionID: action.sessionID, reason: "cancelled" },
+          } as SSEPayload,
+          "C:\\workspace",
+        )
+      await cancelled.promise
+      expect(test.replies).toEqual([])
+      expect(test.rejects).toEqual([])
+      cleanup.resolve()
+      await closing.promise
+      expect(test.rejects).toEqual([])
+      closed.resolve()
+      for (let count = 0; count < 100 && test.rejects.length === 0; count++) await Bun.sleep(1)
+      expect(test.rejects).toHaveLength(1)
+      expect(test.rejects[0]).toMatchObject({
+        requestID: action.id,
+        error: { code: "cancelled", hostRetired: drained && joined, receipt: { outcome: "unknown" } },
+      })
+      expect(test.focused).toEqual([])
+      expect(test.actions).toEqual([])
       test.bridge.dispose()
     }
   })

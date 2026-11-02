@@ -1,6 +1,6 @@
 import { Cause, Deferred, Effect, Exit, Fiber, Latch, Schema, Scope, SynchronizedRef } from "effect"
 import { KiloRunner } from "@/kilocode/effect/runner" // kilocode_change
-import { cancel as cancelObserved } from "@/kilocode/effect/cancellation" // kilocode_change
+import { cancel as cancelObserved, interrupt as retire } from "@/kilocode/effect/cancellation" // kilocode_change
 import { executing } from "@/kilocode/effect/observation" // kilocode_change
 import { SessionRetirement } from "@/kilocode/session/retirement" // kilocode_change
 
@@ -142,7 +142,7 @@ export const make = <A, E = never>(
     Effect.gen(function* () {
       if (shell.ready) yield* shell.ready.await.pipe(Effect.exit, Effect.asVoid)
       yield* Deferred.succeed(shell.cancelled, undefined).pipe(Effect.asVoid)
-      yield* SessionRetirement.interrupt(shell.fiber) // kilocode_change - attribute the genuine selected cancellation
+      yield* retire(shell.fiber) // kilocode_change - join the selected cancellation without masking finalizer defects
     })
 
   // kilocode_change start - open work only after the Running state is committed
@@ -240,26 +240,29 @@ export const make = <A, E = never>(
         case "Running":
           return [
             Effect.gen(function* () {
-              yield* SessionRetirement.interrupt(st.run.fiber) // kilocode_change
-              yield* Deferred.fail(st.run.done, new Cancelled()).pipe(Effect.asVoid)
-              yield* idleIfCurrent()
+              // kilocode_change start - cleanup bookkeeping even when the joined finalizer failed
+              yield* retire(st.run.fiber).pipe(
+                Effect.ensuring(Deferred.fail(st.run.done, new Cancelled()).pipe(Effect.andThen(idleIfCurrent()))),
+              )
+              // kilocode_change end
             }),
             { _tag: "Idle" } as const,
           ] as const
         case "Shell":
           return [
             Effect.gen(function* () {
-              yield* stopShell(st.shell)
-              yield* idleIfCurrent()
+              yield* stopShell(st.shell).pipe(Effect.ensuring(idleIfCurrent())) // kilocode_change
             }),
             { _tag: "Idle" } as const,
           ] as const
         case "ShellThenRun":
           return [
             Effect.gen(function* () {
-              yield* stopShell(st.shell)
-              yield* Deferred.fail(st.run.done, new Cancelled()).pipe(Effect.asVoid)
-              yield* idleIfCurrent()
+              // kilocode_change start - queued callers still settle when shell retirement fails
+              yield* stopShell(st.shell).pipe(
+                Effect.ensuring(Deferred.fail(st.run.done, new Cancelled()).pipe(Effect.andThen(idleIfCurrent()))),
+              )
+              // kilocode_change end
             }),
             { _tag: "Idle" } as const,
           ] as const

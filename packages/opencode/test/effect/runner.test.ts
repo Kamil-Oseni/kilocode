@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Cause, Deferred, Effect, Exit, Fiber, Latch, Ref, Scope } from "effect"
 import { Runner } from "@/effect/runner"
+import { observe } from "@/kilocode/effect/observation" // kilocode_change
 import { it } from "../lib/effect"
 
 const waitForState = <A, E>(runner: Runner.Runner<A, E>, tag: Runner.State<A, E>["_tag"]) =>
@@ -140,6 +141,42 @@ describe("Runner", () => {
       expect(Exit.isFailure(exit)).toBe(true)
     }),
   )
+
+  // kilocode_change start - selected cancellation must propagate the original joined finalizer defect
+  it.live(
+    "cancelRun does not acknowledge an interrupted run with a defective finalizer",
+    Effect.gen(function* () {
+      const scope = yield* Scope.Scope
+      const runner = Runner.make<string>(scope, { onInterrupt: Effect.succeed("interrupted") })
+      const started = yield* Deferred.make<void>()
+      const err = new Error("Original cleanup could not confirm retirement")
+      const work = yield* runner
+        .ensureRunning(
+          Deferred.succeed(started, undefined).pipe(
+            Effect.andThen(Effect.never),
+            Effect.ensuring(Effect.die(err)),
+          ),
+        )
+        .pipe(Effect.forkChild)
+      yield* Deferred.await(started)
+      const id = observe(runner).id
+      if (!id) throw new Error("Original running execution is unavailable")
+      expect(yield* runner.cancelRun("another-execution")).toBe(false)
+      const stopped = yield* runner.cancelRun(id).pipe(Effect.exit)
+      expect(Exit.isFailure(stopped)).toBe(true)
+      if (Exit.isFailure(stopped)) {
+        expect(Cause.hasInterrupts(stopped.cause)).toBe(true)
+        expect(stopped.cause.reasons.filter(Cause.isDieReason).map((reason) => reason.defect)).toContain(err)
+      }
+      const result = yield* Fiber.await(work)
+      expect(Exit.isFailure(result)).toBe(true)
+      if (Exit.isFailure(result))
+        expect(result.cause.reasons.filter(Cause.isDieReason).map((reason) => reason.defect)).toContain(err)
+      expect(runner.busy).toBe(false)
+      expect(yield* runner.cancelRun(id)).toBe(false)
+    }),
+  )
+  // kilocode_change end
 
   it.live(
     "cancel on idle is a no-op",
@@ -349,7 +386,11 @@ describe("Runner", () => {
         .pipe(Effect.forkChild)
       yield* ready.await.pipe(Effect.timeout("250 millis"))
 
-      yield* runner.cancel
+      // kilocode_change start - a failed original shell finalizer also fails its cancellation request
+      const stopped = yield* runner.cancel.pipe(Effect.exit)
+      expect(Exit.isFailure(stopped)).toBe(true)
+      if (Exit.isFailure(stopped)) expect(Cause.pretty(stopped.cause)).toContain("boom")
+      // kilocode_change end
       expect(Exit.isFailure(yield* Fiber.await(sh))).toBe(true)
     }),
   )

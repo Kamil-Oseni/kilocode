@@ -1,3 +1,11 @@
+November 2, 2026 -- Background desktop installation and bounded source verification
+
+The published background desktop SDK and plugin are installed globally. Discovery and a permitted Generalist read-only missing-application probe passed in the normal profile, with the owned session ended. Auto remains deliberately disabled for this plugin and its router is unchanged. Qualification `.tmp/new-pc/global-background-desktop-qualified-20261102.json`, SHA-256 `790f5ad13ed0af12f104732f4d77c3dbca2a2f046c86a129a5b14424b8c0cd81`, preserves all nine definitions and 89 history objects. The installed VSIX remains `009c53ec5e`.
+
+Native background tools with reviewed window grants and a host-cleanup cancellation acknowledgement are source changes only. Focused checks passed three desktop-service cases with 45 assertions and two bridge cases with 38 assertions. The prior real secondary-display leaf proof (`e6494d...`) preserves the foreground window; it does not qualify the new end-to-end in-flight cancellation handshake. No new model, complete Routine worker-chain, or business acceptance is claimed.
+
+Broad components remain **3/9 (33.3%)**; overall readiness remains **unmeasured**. Stable chat and Routine workers retain priority; voice remains deferred. Earlier checkpoints below retain their original dates and evidence scope.
+
 November 2, 2026 -- Installed Routine diagnostics and cancellation handling
 
 Installed source `009c53ec5e`, version `7.4.23-snapshot+009c53ec5e.local.1793604948573`, includes matching-branch Routine assignment validation diagnostics (`225dcc1820`) and clean retirement of cancelled ripgrep initialization (`7b5efe9d07`), alongside the previously qualified Routine lifecycle repairs. The diagnostics native case passed 234 assertions in 145.109 seconds; its formatting/type-aware lint passed in 28.610 seconds with zero warnings or errors. The causal ripgrep baseline failed before the fix; four corrected cases passed 25 assertions in 0.547 seconds. Selected Core types/lint passed in 3.016 seconds, and combined full CLI types passed in 46.860 seconds. These timings are observations, not a causal performance claim.

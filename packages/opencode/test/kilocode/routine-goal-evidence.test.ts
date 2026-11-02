@@ -1146,14 +1146,15 @@ it.live(
   60000,
 )
 
-function lifecycle(name: string, body: (stop: boolean) => Parameters<typeof it.live>[1], timeout: number) {
-  it.live(name, body(false), timeout)
-  it.live("canonical Stop retires a parked native parent and its active required child", body(true), timeout)
+function lifecycle(name: string, body: (mode: "resume" | "stop" | "standing") => Parameters<typeof it.live>[1], timeout: number) {
+  it.live(name, body("resume"), timeout)
+  it.live("canonical Stop retires a parked native parent and its active required child", body("stop"), timeout)
+  it.live("canonical Stop retires a parked standing parent and preserves unrelated queued work", body("standing"), timeout)
 }
 
 lifecycle(
   "resumed Routine goal can audit actual current-run child handoff without granting output ownership",
-  (stop) => () =>
+  (mode) => () =>
     provideTmpdirInstance((directory) =>
       Effect.gen(function* () {
         const sessions = yield* Session.Service
@@ -1227,12 +1228,12 @@ lifecycle(
           dispatch,
           researcher,
         )
-        const open = (agent: RayaTask.Agent, row: Request, sender: RayaTask.Agent) =>
+        const open = (agent: RayaTask.Agent, row: Request, sender: RayaTask.Agent, standing = false) =>
           Effect.gen(function* () {
-            const admitted = yield* errands.take(agent.id)
-            if (!admitted?.childRunID || admitted.id !== row.id)
+            const admitted = standing ? undefined : yield* errands.take(agent.id)
+            if (!standing && (!admitted?.childRunID || admitted.id !== row.id))
               throw new Error("Actual queued delegation was not reserved")
-            const rid = admitted.childRunID
+            const rid = admitted?.childRunID ?? crypto.randomUUID()
             const session = yield* sessions.create({
               agent: "generalist",
               metadata: {
@@ -1242,7 +1243,7 @@ lifecycle(
                   runID: rid,
                   scheduleVersion: 1,
                   trigger: { kind: "manual" },
-                  delegationID: row.id,
+                  ...(standing ? {} : { delegationID: row.id }),
                   organizationID: team.id,
                   organizationRevision: team.revision,
                   outputs: row.outputs,
@@ -1298,7 +1299,7 @@ lifecycle(
               objective,
               outputs: row.outputs,
             })
-            yield* errands.attach(row.id, rid, session.id)
+            if (!standing) yield* errands.attach(row.id, rid, session.id)
             const assistant = yield* sessions.updateMessage({
               id: MessageID.ascending(),
               sessionID: session.id,
@@ -1326,7 +1327,7 @@ lifecycle(
             })
             return { session, user, assistant, run, goal, ctx }
           })
-        const root = yield* open(researcher, seed.record, dispatch)
+        const root = yield* open(researcher, seed.record, dispatch, mode === "standing")
         const busy = (agent: RayaTask.Agent) =>
           Effect.gen(function* () {
             const session = yield* sessions.create({ title: "Busy fixture prevents inference" })
@@ -1559,7 +1560,7 @@ lifecycle(
         expect(rejected.output).not.toContain("You paused this goal yourself")
         expect(waiting.status).toBe("paused")
         expect(waiting.pause).toBe("agent")
-        expect((yield* errands.get(seed.record.id)).state).toBe("running")
+        expect((yield* errands.get(seed.record.id)).state).toBe(mode === "standing" ? "queued" : "running")
         yield* sessions.updatePart({
           ...part,
           type: "tool",
@@ -1575,7 +1576,7 @@ lifecycle(
           },
         })
         expect(yield* RoutineWait.parked(storage, root.session.id, root.user.id)).toBe(true)
-        if (stop) {
+        if (mode !== "resume") {
           const runs = yield* SessionRunState.Service
           const execution = RayaTaskExecution.make(storage)
           const entered = yield* Deferred.make<void>()
@@ -1622,6 +1623,7 @@ lifecycle(
             expect((yield* tasks.runsFor(builder.id)).find((row) => row.id === child.run.id)?.status).toBe("error")
             expect((yield* tasks.runsFor(builder.id)).find((row) => row.id === held.id)).toEqual(prior)
             expect(yield* tasks.runsFor(sales.id)).toEqual(unrelated)
+            if (mode === "standing") expect(yield* errands.get(seed.record.id)).toEqual(seed.record)
             expect(yield* halt()).toEqual(receipt)
             expect(
               Exit.isFailure(
@@ -1630,7 +1632,7 @@ lifecycle(
                     source: "late-after-parent-stop",
                     senderID: researcher.id,
                     recipientID: builder.id,
-                    parentID: seed.record.id,
+                    ...(mode === "standing" ? {} : { parentID: seed.record.id }),
                     parentRunID: root.run.id,
                     organizationID: team.id,
                     organizationRevision: team.revision,

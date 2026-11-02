@@ -88,6 +88,8 @@ The first attempt is retained separately. Its fixture mistakenly used `WS_EX_TOO
 
 This proves the actual leaf adapter and native identity join for that controlled app. Its harness supplies authorization hooks; it is separate from installed native-worker/lease integration. It does not prove an in-flight cancellation, every application's focus behavior or the complete routine chain. Those remain pending; no visible primary-display fixture was used.
 
+One concrete cancellation gap remains in the current backend/host transport: `Desktop.service.cancel` removes the pending request, publishes cancellation and fails its deferred immediately, while `desktop-host.run` races the abort signal. The extension can therefore still be ending its CLI/session after canonical Task/Goal Stop returns; its later reply has no pending backend entry. Internal leaf joining does not prove distributed joining. A background-only host-drained acknowledgement must preserve the pending cancellation identity until host cleanup is confirmed, with bounded failure reporting when the host disconnects or cannot drain. Keep uncertain action delivery separate from cleanup completion, and do not change existing foreground behavior to address this gap.
+
 For global installation, copy the reviewed plugin entry to `~/.config/kilo/plugins/raya-agent-desktop.ts` and its implementation to `~/.config/kilo/skills/raya-agent-desktop/tool.ts`. Update that skill's `SKILL.md` together with those two files, preserving the existing pinned `install.json` and versioned binary. Save any prior files before replacement. Do this only after active normal-profile jobs have closed; existing backends need a reload before discovery. Do not silently widen a worker's allowed tools.
 
 ### SDK dependency setup

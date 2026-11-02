@@ -1,3 +1,13 @@
+November 2, 2026 -- Four Routine and local-model fixes installed
+
+Installed source `416b437ad0`, version `7.4.23-snapshot+416b437ad0.local.1793602820736`, now includes optional Ollama mapped loading, waiting-parent required-child Stop, authenticated standing-budget accounting, and standing-parent child evidence/wait support. The prior causal source proofs retain their scope; child artifacts remain evidence without granting the parent write ownership.
+
+Full CLI types passed in 155.171 seconds. Scoped type-aware lint passed in 20.203 seconds with 86 warnings retained. The stock package target exited zero in 144.797 seconds with at least 11.03 GiB free RAM; forced owned descendant cleanup after the original target was gone and wrapper exit one remain separately recorded. Before/after preservation checks passed naturally in 63.875/7.343 seconds, preserving 7,138 saved files and unrelated extension registrations. Official installation exited zero and 561 archive entries passed CRC checks.
+
+Qualified delivery `.tmp/new-pc/worker-416b437ad0-delivery-qualified.json` has SHA-256 `39aee6315b554b49cc68d3f0c6aa9369d294c3273fc4d9008a28d517f2859430`; its source qualification is `f91a881bbfc2127676037ca2f257d70d6ec7e5076403dbee3a213ef88480ec63`. This establishes the installed payload and preservation, not current business or full-model workflow acceptance. After the November 2 resume and RAM release, fresh startup against the nine-definition/89-Run baseline and the real multiworker workflow remain pending. No UI or main-display check is claimed.
+
+Broad components remain **3/9 (33.3%)**, overall readiness **unmeasured**. Stable chat and Routine workers remain the priority; model/business acceptance is still open and voice remains deferred.
+
 November 1, 2026 -- Delivery blocked by unstable RAM after source validation
 
 Current source includes the standing-parent evidence/wait repair and passed the two native parent lifecycle cases with 88 assertions. Partial source review for fc9335b1e0 is saved in .tmp/new-pc/worker-fc9335b1e0-source-reviewed.json; it explicitly retains incomplete type validation. The stock candidate build declined admission before launching at 7.84 GiB free, below its 9 GiB admission requirement with a 6 GiB reserve. No candidate package or new installation was produced. All owned test/model jobs are terminal with joined readers and empty native families; protected user apps remain open.

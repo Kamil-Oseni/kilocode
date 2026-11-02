@@ -76,7 +76,7 @@ Root SDK generation completed naturally with exit 0 in 39.938 seconds. Scoped CL
 
 One focused bridge regression passed four scenarios with 26 assertions: an approved sensitive prompt, a wrong target, a replaced identity, and observe-only mutation refusal. It uses the real lease store and existing isolated driver/provider fixtures, and checks that native focus, physical action and foreground capture are unused. It is a grant/routing regression, not real app or installed-worker acceptance. Receipt: `.tmp/new-pc/native-background-regression-20261102.json`.
 
-Packaging and actual worker acceptance remain pending. The focused acceptance is one selected disposable app window, a real saved field result, observe-only and wrong-window refusals, and cancellation/cleanup through the actual worker route. Do not open the fixture while the user's main-screen restriction is active. No broad model campaign is required.
+Packaging and actual worker acceptance remain pending. The focused acceptance is one selected disposable app window, a real saved field result, observe-only and wrong-window refusals, and cancellation/cleanup through the actual worker route. Keep fixtures off the main display; require a confirmed secondary display and a no-activation fence while that restriction is active. No broad model campaign is required.
 
 ### Real secondary-display adapter check
 

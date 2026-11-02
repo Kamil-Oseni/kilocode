@@ -31,14 +31,12 @@ Skills load on demand, keeping the full desktop manual out of ordinary conversat
 
 - The downloaded binary returned version 1.0.2 and JSON envelope 2.5.
 - `status` reported Windows accessibility granted and the supported desktop surfaces.
-- A temporary multi-agent session started with tracing off. Two distinct worker IDs successfully queried that session, then `session end` sealed it. No application edits or real cursor movement were performed.
+- An initial temporary multi-agent session started with tracing off. Two distinct worker IDs successfully queried that session, then `session end` sealed it. That initial check did not edit applications; the later application check is described below.
 - The installed Raya CLI, invoked from `D:/Raya/Workspaces/WebsitePilot`, returned exactly one `raya-agent-desktop` skill from the global config directory, with trusted global provenance. No local project copy supplied that result.
 - The temporary session ended and no `agent-desktop` process remained afterward.
-- A first session-start attempt without `--cursor` was refused because multi-agent mode requires it. The accepted command included `--cursor`; it reported `rendered: false`. Visible cursor rendering and multi-worker application actions remain unverified.
+- A first session-start attempt without `--cursor` was refused because multi-agent mode requires it. The accepted command included `--cursor`; it reported `rendered: false`. Visible cursor rendering remains unverified.
 
-## Remaining integration
-
-### Practical background check
+## Practical background check
 
 One small native WinForms process exposed two disposable windows. Two distinct worker IDs in one multi-agent session concurrently set different fields through `ValuePattern.SetValue`, then clicked their own Save buttons through `InvokePattern.Invoke`. Both field writes returned `delivered_verified`. Save clicks returned `delivered_unverified`; fresh UI snapshots showed the correct Saved labels, and independent file reads confirmed the exact two outputs.
 
@@ -47,6 +45,8 @@ The fixture recorded the same unrelated foreground window at launch, edit and sa
 Observed resident memory: two cursor processes approximately 21.5 MB combined; the fixture approximately 36.7 MB. Free system RAM was 10.59 GiB during the check. These are point observations, not peak or production workload measurements. Both windows closed through observed semantic refs, the session ended and no fixture/cursor processes remained. Claude, Node, VM and model processes were not changed.
 
 Local evidence is retained at `.tmp/agent-desktop-live-20261101/result.json`, with hashes of saved files, UI readbacks, click receipts and foreground event logs. This check used CLI worker identities, not two LLM-driven Raya workers. It does not prove native panel integration, app-independent reliability or cancellation of an in-flight action.
+
+## Remaining integration
 
 Run one authorized background app task through Raya's actual worker routing and verify saved output, cancellation and cleanup. Then route native desktop requests through a provider adapter if the CLI path proves useful. Do not claim the component checks prove full routine completion or that this replaces the native desktop UI.
 

@@ -2,7 +2,7 @@ import { expect } from "bun:test"
 import type { JSONSchema7 } from "@ai-sdk/provider"
 import { createHash } from "node:crypto"
 import path from "node:path"
-import { Effect, Exit, Schema } from "effect"
+import { Deferred, Effect, Exit, Fiber, Schema } from "effect"
 import { eq } from "drizzle-orm"
 import {
   RayaRoutineDelegationTable as Delegation,
@@ -23,6 +23,7 @@ import { Agent } from "@/agent/agent"
 import { Truncate } from "@/tool/truncate"
 import { Permission } from "@/permission"
 import { Session } from "@/session/session"
+import { SessionRunState } from "@/session/run-state"
 import { Storage } from "@/storage/storage"
 import { MessageID, PartID } from "@/session/schema"
 import { RayaGoal } from "@/kilocode/goal"
@@ -32,6 +33,7 @@ import { RayaTask } from "@/kilocode/task"
 import { RayaTaskDelegation, prompt, type Record as Request } from "@/kilocode/task/delegation"
 import { RayaTaskOrganization } from "@/kilocode/task/organization"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
+import { RayaTaskExecution } from "@/kilocode/task/execution"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
 import { final } from "@/kilocode/task/final-report"
 import * as JobContract from "@/kilocode/task/job-contract"
@@ -60,6 +62,7 @@ const it = testEffect(
       Truncate.node,
       Permission.node,
       Session.node,
+      SessionRunState.node,
       SessionProjector.node,
       EventV2Bridge.node,
       Storage.node,
@@ -1143,9 +1146,14 @@ it.live(
   60000,
 )
 
-it.live(
+function lifecycle(name: string, body: (stop: boolean) => Parameters<typeof it.live>[1], timeout: number) {
+  it.live(name, body(false), timeout)
+  it.live("canonical Stop retires a parked native parent and its active required child", body(true), timeout)
+}
+
+lifecycle(
   "resumed Routine goal can audit actual current-run child handoff without granting output ownership",
-  () =>
+  (stop) => () =>
     provideTmpdirInstance((directory) =>
       Effect.gen(function* () {
         const sessions = yield* Session.Service
@@ -1567,6 +1575,79 @@ it.live(
           },
         })
         expect(yield* RoutineWait.parked(storage, root.session.id, root.user.id)).toBe(true)
+        if (stop) {
+          const runs = yield* SessionRunState.Service
+          const execution = RayaTaskExecution.make(storage)
+          const entered = yield* Deferred.make<void>()
+          const cancelled = yield* Deferred.make<void>()
+          const unrelated = yield* tasks.runsFor(sales.id)
+          const prior = (yield* tasks.runsFor(builder.id)).find((row) => row.id === held.id)
+          expect(yield* execution.acquire(root.run)).toBeDefined()
+          yield* execution.enter(root.run, Effect.void)
+          expect(yield* execution.acquire(child.run)).toBeDefined()
+          const active = yield* execution
+            .enter(
+              child.run,
+              runs.ensureRunning(
+                child.session.id,
+                Deferred.succeed(cancelled, undefined).pipe(Effect.as({ info: child.assistant, parts: [] })),
+                Deferred.succeed(entered, undefined).pipe(Effect.andThen(Effect.never)),
+              ),
+            )
+            .pipe(Effect.forkChild)
+          const runner = RayaTaskRunner.make({ database, storage, sessions, halt: runs.cancel })
+          const halt = () =>
+            runner.stopGoal((control) =>
+              goals.stop(root.session.id, waiting.intent!, runs, undefined, undefined, {
+                prepare: (id) =>
+                  control.prepare(id).pipe(Effect.mapError((err) => new RayaGoal.AuditError({ message: err.message }))),
+                finish: (id, pin, finished) =>
+                  control
+                    .finish(id, pin, finished)
+                    .pipe(Effect.mapError((err) => new RayaGoal.AuditError({ message: err.message }))),
+              }),
+            )
+          try {
+            yield* Deferred.await(entered)
+            expect((yield* runs.inspect(child.session.id)).phase).toBe("running")
+            expect((yield* execution.receipt(child.run))?.state).toBe("active")
+            expect((yield* execution.receipt(root.run))?.state).toBe("idle")
+            const receipt = yield* halt()
+            expect(receipt).toMatchObject({ intent: waiting.intent, phase: "finished" })
+            expect((yield* errands.get(assigned.id)).state).toBe("cancelled")
+            expect(yield* Deferred.isDone(cancelled)).toBe(true)
+            expect((yield* runs.inspect(child.session.id)).phase).toBe("idle")
+            expect(yield* execution.receipt(child.run)).toBeUndefined()
+            expect((yield* tasks.runsFor(researcher.id)).find((row) => row.id === root.run.id)?.status).toBe("stopped")
+            expect((yield* tasks.runsFor(builder.id)).find((row) => row.id === child.run.id)?.status).toBe("error")
+            expect((yield* tasks.runsFor(builder.id)).find((row) => row.id === held.id)).toEqual(prior)
+            expect(yield* tasks.runsFor(sales.id)).toEqual(unrelated)
+            expect(yield* halt()).toEqual(receipt)
+            expect(
+              Exit.isFailure(
+                yield* runner
+                  .delegate({
+                    source: "late-after-parent-stop",
+                    senderID: researcher.id,
+                    recipientID: builder.id,
+                    parentID: seed.record.id,
+                    parentRunID: root.run.id,
+                    organizationID: team.id,
+                    organizationRevision: team.revision,
+                    objective: "This stopped parent must not admit another child",
+                    outputs: [],
+                  })
+                  .pipe(Effect.exit),
+              ),
+            ).toBe(true)
+          } finally {
+            yield* runs.cancel(child.session.id)
+            yield* Fiber.await(active)
+            yield* execution.finish(child.run)
+            yield* execution.finish(root.run)
+          }
+          return
+        }
         yield* goals.control(root.session.id, "paused")
         expect(
           (yield* goals.delegated(root.session.id, root.run.id, (next) => Effect.succeed(next.revision!))).resumed,

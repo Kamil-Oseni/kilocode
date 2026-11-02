@@ -2914,6 +2914,7 @@ export namespace RayaTaskRunner {
           | "retained-state"
           | "retained-review"
           | "retained-owner"
+          | "delegation"
           | "remaining",
       ) => {
         log.warn("Routine Stop retirement refused", { stage })
@@ -3012,6 +3013,18 @@ export namespace RayaTaskRunner {
             return yield* refuse("legacy-transition")
         }
         yield* settle(sessionID, prior, pin)
+        // Canonical parent settlement fences new handoffs before descendant
+        // selection. Strict cancellation joins descendants without dispatching
+        // unrelated queued work or replacing the parent's original Stop.
+        if (pin.stop && errands) {
+          const row = yield* errands.bySession(sessionID)
+          if (row && (row.childRunID !== run.id || row.recipientID !== run.agentID)) return yield* refuse("delegation")
+          const children = row ? [row] : yield* errands.byRun(run.id)
+          for (const child of children) {
+            if (!row && child.senderID !== run.agentID) return yield* refuse("delegation")
+            yield* abort(child.id, true)
+          }
+        }
         const final = (yield* tasks.runsFor(run.agentID)).find((row) => row.id === run.id)
         if (!final || RayaTask.pending(final)) return yield* refuse("pending-final")
         if (yield* execution.retained(run)) {

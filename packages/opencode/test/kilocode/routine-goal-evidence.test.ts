@@ -2,7 +2,7 @@ import { expect } from "bun:test"
 import type { JSONSchema7 } from "@ai-sdk/provider"
 import { createHash } from "node:crypto"
 import path from "node:path"
-import { Deferred, Effect, Exit, Fiber, Schema } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Schema } from "effect"
 import { eq } from "drizzle-orm"
 import {
   RayaRoutineDelegationTable as Delegation,
@@ -495,6 +495,31 @@ for (const mode of ["failed", "completed"])
             objective: "Replace the frozen entry objective",
           })
           expect(mixed.metadata.requestStatus).toBe("unresolved")
+          expect(yield* database.db.select().from(Delegation).all()).toEqual(pending)
+          expect(yield* database.db.select().from(Contracts).all()).toEqual(captures)
+          expect(yield* tasks.runsFor(researcher.id)).toEqual(history)
+          for (const contracted of [true, false]) {
+            const invalid = yield* assign
+              .execute(
+                contracted
+                  ? { ...minimal, contract: { ...proposal, entry: "missing_stage" } }
+                  : Object.fromEntries(Object.entries(minimal).filter(([key]) => key !== "contract")),
+                context(chat.id, assistant.id, "auto", `invalid-shape-${contracted}-${mode}`),
+              )
+              .pipe(Effect.exit)
+            if (Exit.isSuccess(invalid)) throw new Error("Invalid assignment unexpectedly passed native validation")
+            const error = Cause.squash(invalid.cause)
+            const message = error instanceof Error ? error.message : String(error)
+            if (contracted) {
+              expect(message).toContain("The contract entry must identify an existing stage.")
+              expect(message).not.toContain('["recipientID"]')
+              expect(message).not.toContain('["objective"]')
+              continue
+            }
+            expect(message).toContain('["recipientID"]')
+            expect(message).toContain('["objective"]')
+            expect(message).not.toContain('["contract"]')
+          }
           expect(yield* database.db.select().from(Delegation).all()).toEqual(pending)
           expect(yield* database.db.select().from(Contracts).all()).toEqual(captures)
           expect(yield* tasks.runsFor(researcher.id)).toEqual(history)

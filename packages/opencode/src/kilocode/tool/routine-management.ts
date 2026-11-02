@@ -1,7 +1,7 @@
 import path from "node:path"
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
-import { Effect, Option, Schema } from "effect"
+import { Effect, Option, Result, Schema, SchemaIssue } from "effect"
 import { english } from "@opencode-ai/core/kilocode/schedule"
 import type { Database } from "@opencode-ai/core/database/database"
 import type { PtyArchive } from "@/kilocode/pty/archive"
@@ -43,6 +43,7 @@ import * as Capture from "@/kilocode/task/job-contract-capture"
 import * as Contract from "@/kilocode/task/job-contract-store"
 import { same as staged } from "@/kilocode/task/job-contract"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
+import { format } from "./tool"
 
 const Key = Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9_-]{0,63}$/))
 const Text = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(4000))
@@ -293,15 +294,13 @@ const LegacyAssignment = Schema.Struct({
       "Supply only a user-requested model-cost limit or an allocation required by the saved organization. Otherwise omit. Never invent a cap when the user says to omit budget. This is a limit on model charges, not an estimate of the task's business value.",
   }),
 })
-const AssignOrganizationWork = Schema.Union([
-  LegacyAssignment,
-  Schema.Struct({
-    ...LegacyAssignment.fields,
-    contract: Proposal,
-    recipientID: Schema.optional(LegacyAssignment.fields.recipientID),
-    objective: Schema.optional(LegacyAssignment.fields.objective),
-  }),
-])
+const ContractAssignment = Schema.Struct({
+  ...LegacyAssignment.fields,
+  contract: Proposal,
+  recipientID: Schema.optional(LegacyAssignment.fields.recipientID),
+  objective: Schema.optional(LegacyAssignment.fields.objective),
+})
+const AssignOrganizationWork = Schema.Union([LegacyAssignment, ContractAssignment])
 const InspectTeam = Schema.Struct({
   cursor: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
   limit: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(20))),
@@ -1313,6 +1312,18 @@ export function routineManagementTools(input: {
         "Assign only the FIRST stage of one tracked job from the main chat to an existing organization. First call inspect_routines. For a new multi-stage job, populate contract with the planned stages' exact objectives, outputs, criteria and required onward links from the owner's request; only its entry is dispatched now. When supplying contract, omit top-level recipientID, objective, expected, outputs and criteria: Raya derives them exactly from the contract entry, including its saved expected result and file checks. Explicit duplicate fields from older clients must match that entry exactly; conflicts are refused. Put later stages' deliverables and criteria only in their own contract stages, not in the top-level assignment. Make one call, then acknowledge its saved state; the receiving worker owns later delegate_work handoffs after producing real files. Never pre-dispatch later stages. Describe approved sources and output destinations in objective or context. Omit deadlines the user did not supply. Infer the best authorized route from the workers' saved roles and objectives when one route clearly fits; ask one concise question only when the responsible worker or intended result is genuinely ambiguous. Turn the user's plain-language request into a clear outcome, expected result, and useful context. Include request-specific criteria for the receiving worker's actual deliverables and verified handoff. Audited jobs that hand off produced files require child-specific criteria; never copy unrelated parent criteria. Omit criteria only for a simple question requiring a reply. Do not ask the user for internal IDs or organization revisions.",
       parameters: AssignOrganizationWork,
       jsonSchema: { ...ToolJsonSchema.fromSchema(LegacyAssignment), additionalProperties: false },
+      formatValidationError: (error) => {
+        if (!Schema.isSchemaError(error)) return format(error)
+        const actual = SchemaIssue.getActual(error.issue)
+        if (Option.isNone(actual)) return format(error)
+        const value = actual.value
+        const schema =
+          value !== null && typeof value === "object" && "contract" in value && value.contract !== undefined
+            ? ContractAssignment
+            : LegacyAssignment
+        const parsed = Schema.decodeUnknownResult(schema, { errors: "all" })(value)
+        return format(Result.isFailure(parsed) ? parsed.failure : error)
+      },
       execute: (raw: typeof AssignOrganizationWork.Type, ctx: Tool.Context): Effect.Effect<Tool.ExecuteResult> =>
         Effect.gen(function* () {
           const selected = raw.contract ? yield* assignment(raw.contract, raw) : undefined

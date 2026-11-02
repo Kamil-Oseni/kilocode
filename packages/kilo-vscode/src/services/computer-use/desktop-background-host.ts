@@ -94,12 +94,14 @@ export class DesktopBackgroundHost {
     let cleanup: Record | undefined
     let failure: string | undefined
     let attempted = false
+    let started = false
     try {
       const binary = await this.binary()
       await hooks.authorize("observe")
       await hooks.verify(target)
       signal.throwIfAborted()
       // Creation must return session ownership before cancellation can discard it.
+      started = true
       const start = await this.run(binary, ["session", "start", "--no-trace"])
       const owned = object(start.data).session_id
       if (typeof owned !== "string" || !/^run-[a-zA-Z0-9_-]+$/.test(owned))
@@ -190,7 +192,14 @@ export class DesktopBackgroundHost {
     } finally {
       this.locks.delete(id)
     }
-    return { ok: success(result, cleanup, failure), attempted, result, cleanup, failure }
+    return {
+      ok: success(result, cleanup, failure),
+      drained: !started || (!!cleanup && clean(cleanup)),
+      attempted,
+      result,
+      cleanup,
+      failure,
+    }
   }
 
   private async binary() {

@@ -302,6 +302,7 @@ describe("desktop observation bridge", () => {
           delivered++
           return {
             ok: true,
+            drained: true,
             attempted: true,
             result: { action: { data: { disposition: { delivery: "delivered_verified" } } } },
             cleanup: { ok: true },

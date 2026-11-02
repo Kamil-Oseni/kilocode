@@ -111,10 +111,11 @@ export class DesktopBackgroundHost {
         const windows = reply.data
         if (!clean(reply) || !Array.isArray(windows)) throw new Error("Background window inventory is unavailable")
         const found = windows.map(object).filter((item) => item.id === id)
+        if (found.length !== 1)
+          throw new Error("The selected window is not available in the background desktop inventory")
         const pid = found[0]?.pid
         const instance = found[0]?.process_instance
         if (
-          found.length !== 1 ||
           typeof pid !== "number" ||
           !Number.isSafeInteger(pid) ||
           pid < 1 ||

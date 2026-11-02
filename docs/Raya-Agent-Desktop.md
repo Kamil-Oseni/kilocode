@@ -78,6 +78,16 @@ One focused bridge regression passed four scenarios with 26 assertions: an appro
 
 Packaging and actual worker acceptance remain pending. The focused acceptance is one selected disposable app window, a real saved field result, observe-only and wrong-window refusals, and cancellation/cleanup through the actual worker route. Do not open the fixture while the user's main-screen restriction is active. No broad model campaign is required.
 
+### Real secondary-display adapter check
+
+On November 2, a second display was confirmed away from the foreground window. One owned WinForms fixture ran wholly on that display with `ShowWithoutActivation` and `WS_EX_NOACTIVATE`. The real `DesktopBackgroundHost` used the pinned Vercel binary and the existing `WindowsDesktopDriver` identity, inventory and foreground queries. Snapshot, setting the Draft field and one Save invocation all completed. Independent file reading matched the exact expected text, and a fresh accessibility readback showed the Saved label.
+
+The field write reported `delivered_verified`; the Save invocation reported `delivered_unverified`, so the saved file and readback provide its separate effect evidence. All three owned Vercel sessions ended successfully. The fixture recorded 209 foreground samples, plus edit/save events, with the same primary-display foreground HWND throughout. It closed through its own stop-file mechanism. The owned guard ended naturally with exit 0 in 12 seconds, joined streams and an empty process family; minimum free RAM was 11.69 GiB. Receipt: `.tmp/new-pc/background-leaf-live-20261102-v2.json`; artifacts: `.tmp/new-pc/background-leaf-live-20261102-43fb58348af44034aa1e0c18750de1a9/`.
+
+The first attempt is retained separately. Its fixture mistakenly used `WS_EX_TOOLWINDOW`, which the [versioned upstream window filter](https://github.com/vercel-labs/agent-desktop/blob/v1.0.2/crates/windows/src/system/window/window_ops.rs) excludes from inventory. The adapter refused before any input and ended its session. Removing that fixture style while retaining no-activation behavior made the corrected check pass; no production identity check was weakened. The adapter now distinguishes an absent inventory target from missing process-generation evidence.
+
+This proves the actual leaf adapter and native identity join for that controlled app. Its harness supplies authorization hooks; it is separate from installed native-worker/lease integration. It does not prove an in-flight cancellation, every application's focus behavior or the complete routine chain. Those remain pending; no visible primary-display fixture was used.
+
 For global installation, copy the reviewed plugin entry to `~/.config/kilo/plugins/raya-agent-desktop.ts` and its implementation to `~/.config/kilo/skills/raya-agent-desktop/tool.ts`. Update that skill's `SKILL.md` together with those two files, preserving the existing pinned `install.json` and versioned binary. Save any prior files before replacement. Do this only after active normal-profile jobs have closed; existing backends need a reload before discovery. Do not silently widen a worker's allowed tools.
 
 ### SDK dependency setup

@@ -1,3 +1,11 @@
+November 1, 2026 -- Source Routine parent Stop and standing-budget repairs
+
+Source `d4a2f68fd0` stops the required native child when its waiting Routine parent is stopped. The causal regression reached 31 assertions and showed the child still running before the fix; the corrected case passed 40 assertions in 12.422 seconds, including unrelated/completed Run preservation and repeated Stop-intent handling. An additional standing/direct-branch Stop check remains under independent review; it is not counted as passed here.
+
+Source `102eb13f84` counts an authenticated standing Routine and its delegated work within their shared organization reservation instead of charging the allowance twice. The native 20-budget/5-child case failed with nine assertions before the fix and passed 18 assertions in 2.125 seconds afterward. Missing, stale or mismatched ownership remains conservative. Final budget formatting/lint verification was stopped by the 6 GiB RAM reserve; Stop lint declined admission without starting. Combined targeted checks, full CLI types, packaging and installed validation remain pending.
+
+Both repairs are source-only. Installed Raya remains `eb9e21404d`, with nine definitions and 89 saved Runs unchanged; no current installed full-model workflow pass is claimed. Broad components remain **3/9 (33.3%)**, overall readiness **unmeasured**. Stable chat and Routine workers remain the priority, with Claude/Node protected and voice deferred.
+
 November 1, 2026 -- Source mapped-loading support; Routine run remains memory-limited
 
 Source commit `bc7a943e01` preserves an explicitly configured boolean Ollama mapped-loading option through native requests, including streaming and nonstreaming calls. The focused regression passed 50 assertions; scoped lint and the shared-source annotation guard passed. An absent option keeps existing behavior. This is source-only qualification: full CLI typecheck, packaging and installed validation remain pending for this change. The installed build remains `eb9e21404d`.

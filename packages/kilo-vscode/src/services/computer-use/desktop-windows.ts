@@ -66,6 +66,7 @@ public static class RayaDesktopNative {
   public sealed class WindowInfo {
     public string WindowID;
     public string Identity;
+    public string ProcessInstance;
     public string Location;
     public string Title;
     public uint ProcessID;
@@ -186,21 +187,27 @@ public static class RayaDesktopNative {
     uint process;
     GetWindowThreadProcessId(handle, out process);
     string identity = null;
+    string generation = null;
     try {
       using (var owner = System.Diagnostics.Process.GetProcessById((int)process))
       using (var hash = System.Security.Cryptography.SHA256.Create()) {
-        var source = String.Format("pid:{0};start:{1};class:{2}", process, owner.StartTime.ToUniversalTime().Ticks, kind.ToString());
+        var born = owner.StartTime.ToUniversalTime();
+        var source = String.Format("pid:{0};start:{1};class:{2}", process, born.Ticks, kind.ToString());
         var instance = GetProp(handle, InstanceProperty);
         if (instance != IntPtr.Zero) source += ";instance:" + instance.ToInt64().ToString(System.Globalization.CultureInfo.InvariantCulture);
         identity = BitConverter.ToString(hash.ComputeHash(Encoding.UTF8.GetBytes(source))).Replace("-", "");
+        var ticks = born.ToFileTimeUtc();
+        generation = String.Format(System.Globalization.CultureInfo.InvariantCulture, "windows-proc-v1:{0}:{1}", ticks / 10000000L, ticks % 10000000L);
       }
     } catch (Exception error) {
       System.Diagnostics.Debug.WriteLine("Raya window process identity unavailable: " + error.GetType().Name);
       identity = null;
+      generation = null;
     }
     return new WindowInfo {
       WindowID = String.Format("0x{0:X}", handle.ToInt64()),
       Identity = identity,
+      ProcessInstance = generation,
       Location = String.Format("pid:{0};class:{1};title:{2}", process, kind.ToString(), title.ToString()),
       Title = title.ToString(),
       ProcessID = process,
@@ -890,6 +897,7 @@ $items = @([RayaDesktopNative]::Windows() | ForEach-Object {
     location = $_.Location
     title = $_.Title
     processID = [int]$_.ProcessID
+    processInstance = $_.ProcessInstance
     x = $_.X
     y = $_.Y
     width = $_.Width
@@ -1069,7 +1077,11 @@ switch ($action.operation) {
 `
 }
 
-export type Runner = { run(script: string, guard?: () => void): Promise<string>; cancel(): void }
+export type Runner = {
+  run(script: string, guard?: () => void): Promise<string>
+  cancel(): void
+  join?(): Promise<void>
+}
 const HOST_OUTPUT = 30 * 1024 * 1024
 
 const host = String.raw`
@@ -1096,6 +1108,7 @@ export function runner(timeout = 30_000): Runner {
   let timer: ReturnType<typeof setTimeout> | undefined
   let stdout = ""
   let stderr = ""
+  const pending = new Set<Promise<void>>()
 
   const stop = (error: Error) => {
     clearTimeout(timer)
@@ -1112,6 +1125,14 @@ export function runner(timeout = 30_000): Runner {
       ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(host, "utf16le").toString("base64")],
       { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] },
     )
+    // Close follows exit/error and joins the child's stdio, including retired hosts.
+    const closed = new Promise<void>((resolve) => {
+      process.once("close", () => {
+        pending.delete(closed)
+        resolve()
+      })
+    })
+    pending.add(closed)
     stdout = ""
     stderr = ""
     process.stdout.setEncoding("utf8")
@@ -1190,6 +1211,9 @@ export function runner(timeout = 30_000): Runner {
       child = undefined
       stop(new Error("Windows desktop driver command was cancelled"))
       process?.kill()
+    },
+    join: async () => {
+      while (pending.size) await Promise.all(pending)
     },
   }
 }
@@ -2076,6 +2100,14 @@ export class WindowsDesktopDriver implements DesktopDriver {
         typeof window.foreground !== "boolean"
       )
         throw new Error("Windows desktop window entry is incomplete")
+      if (window.processInstance === null) delete window.processInstance
+      if (
+        window.processInstance !== undefined &&
+        (typeof window.processInstance !== "string" ||
+          window.processInstance.length > 200 ||
+          !/^windows-proc-v1:\d+:\d{1,7}$/.test(window.processInstance))
+      )
+        throw new Error("Windows desktop process generation is invalid")
       return window as DesktopWindow
     })
   }

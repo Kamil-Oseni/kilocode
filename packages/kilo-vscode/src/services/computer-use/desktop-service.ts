@@ -10,6 +10,7 @@ import { DesktopSession } from "./desktop-session"
 import { WindowsDesktopDriver } from "./desktop-windows"
 import { DesktopBridge } from "./desktop-bridge"
 import { DesktopBackgroundHost } from "./desktop-background-host"
+import { DesktopBackgroundProbe } from "./desktop-background-probe"
 import { ComputerUseLeaseStore, type Authorization, type AuthorizationRequest } from "./lease-store"
 import type { KiloConnectionService } from "../cli-backend/connection-service"
 import { WindowsPauseHotkey } from "./windows-pause-hotkey"
@@ -194,6 +195,7 @@ export class DesktopAutomationService implements vscode.Disposable {
       isAbsolute(root)
         ? new DesktopBackgroundHost(join(root, "skills", "raya-agent-desktop", "install.json"))
         : undefined,
+      (signal: AbortSignal) => new DesktopBackgroundProbe(signal),
     )
     this.capture = new DesktopCaptureLifecycle(
       this.lease,

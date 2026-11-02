@@ -59,6 +59,7 @@ export type DesktopWindow = {
   location: string
   title: string
   processID: number
+  processInstance?: string
   x: number
   y: number
   width: number
@@ -245,9 +246,10 @@ export class DesktopSession {
     return this.driver.observe(fresh ? { ...options, fresh: true } : options)
   }
 
-  async windows(): Promise<{ windows: DesktopWindow[]; observation: DesktopObservation }> {
+  async windows(windowID?: string): Promise<{ windows: DesktopWindow[]; observation: DesktopObservation }> {
     const revision = this.revision
-    const windows = await this.driver.windows()
+    const listed = await this.driver.windows()
+    const windows = windowID === undefined ? listed : listed.filter((window) => window.windowID === windowID)
     if (revision !== this.revision) throw new Error("Desktop window list cancelled after control changed")
     this.validateWindows(windows)
     const observation = this.observations.issue(this.catalog(windows), this.revision)
@@ -571,6 +573,13 @@ export class DesktopSession {
         throw new Error("Desktop window list contains an invalid or duplicate identity")
       if (window.identity !== undefined && (!window.identity || window.identity.length > 200))
         throw new Error("Desktop window process identity is invalid")
+      if (
+        window.processInstance !== undefined &&
+        (typeof window.processInstance !== "string" ||
+          window.processInstance.length > 200 ||
+          !/^windows-proc-v1:\d+:\d{1,7}$/.test(window.processInstance))
+      )
+        throw new Error("Desktop window process generation is invalid")
       if (
         !Number.isInteger(window.processID) ||
         window.processID < 0 ||

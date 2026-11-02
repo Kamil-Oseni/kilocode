@@ -6,7 +6,7 @@ import {
   RayaRoutineMessageTable as Message,
 } from "@opencode-ai/core/kilocode/routine.sql"
 import { SessionID } from "@/session/schema"
-import { commitment, direct, standing } from "./commitment"
+import { coverage, direct } from "./commitment"
 import { cost as coordinatorCost } from "./coordinator"
 import { Artifact, artifacts } from "./delegation"
 import { AttachmentMeta, Clip, Record as MessageRecord } from "./inbox"
@@ -394,10 +394,9 @@ export namespace RayaTaskInfo {
         .where(eq(Delegation.organization_id, organizationID))
         .all()
         .pipe(Effect.orDie)
-      const committedCost = commitment(all)
       const directCost = yield* direct(db, organizationID).pipe(Effect.orDie)
       const coordinated = yield* coordinatorCost(db, organizationID).pipe(Effect.orDie)
-      const held = yield* standing(db, organizationID).pipe(Effect.orDie)
+      const held = yield* coverage(db, organizationID, all).pipe(Effect.orDie)
       const standaloneCost = directCost + held.recorded
       const summary = {
         total: all.length,
@@ -405,7 +404,7 @@ export namespace RayaTaskInfo {
         needsAttention: all.filter((row) => row.state === "needs_input" || row.state === "failed").length,
         uncertain: all.filter((row) => !active.has(row.state) && row.session_id !== null && row.cost === null).length,
         recordedCost: all.reduce((total, row) => total + (row.cost ?? 0), standaloneCost + coordinated),
-        committedCost: committedCost + directCost + coordinated + held.committed,
+        committedCost: directCost + coordinated + held.committed,
         standaloneCost,
         coordinatorCost: coordinated,
       }

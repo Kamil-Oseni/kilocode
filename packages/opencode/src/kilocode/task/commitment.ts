@@ -3,6 +3,7 @@ import { Effect } from "effect"
 import type { Database } from "@opencode-ai/core/database/database"
 import { RayaRoutineOrganizationReservationTable as Reservation } from "@opencode-ai/core/kilocode/routine.sql"
 import { SessionTable } from "@opencode-ai/core/session/sql"
+import { isRecord } from "@/util/record"
 
 type Row = {
   id: string
@@ -37,6 +38,77 @@ export function commitment(rows: readonly Row[]) {
 }
 
 type Ledger = Pick<Database.Interface["db"], "select">
+
+/** An authenticated standing run reserves its direct work and delegation subtree together. */
+export function coverage(
+  db: Ledger,
+  organizationID: string,
+  rows: readonly (Row & { parent_run_id: string | null; sender_id: string; organization_id: string | null })[],
+) {
+  return Effect.gen(function* () {
+    const held = yield* standing(db, organizationID)
+    const reservations = yield* db
+      .select({ reservation: Reservation, session: SessionTable })
+      .from(Reservation)
+      .leftJoin(SessionTable, eq(SessionTable.id, Reservation.session_id))
+      .where(eq(Reservation.organization_id, organizationID))
+      .all()
+    const covered = new Set<string>()
+    const edges = new Map<string, string[]>()
+    for (const row of rows) {
+      if (!row.parent_id) continue
+      edges.set(row.parent_id, [...(edges.get(row.parent_id) ?? []), row.id])
+    }
+    const totals = { committed: held.committed }
+    for (const { reservation, session } of reservations) {
+      const owner = session?.metadata?.rayaRoutine
+      if (
+        reservation.state !== "linked" ||
+        !session ||
+        session.id !== reservation.session_id ||
+        session.time_archived !== null ||
+        !isRecord(owner) ||
+        owner.runID !== reservation.run_id ||
+        owner.agentID !== reservation.agent_id ||
+        owner.organizationID !== organizationID ||
+        owner.organizationRevision !== reservation.organization_revision ||
+        owner.budget !== reservation.budget ||
+        owner.delegationID !== undefined ||
+        !Number.isFinite(session.cost) ||
+        session.cost < 0
+      )
+        continue
+      const selected = new Set(
+        rows
+          .filter(
+            (row) =>
+              row.parent_id === null &&
+              row.parent_run_id === reservation.run_id &&
+              row.sender_id === reservation.agent_id &&
+              row.organization_id === organizationID,
+          )
+          .map((row) => row.id),
+      )
+      const pending = [...selected]
+      while (pending.length) {
+        const parent = pending.pop()!
+        for (const id of edges.get(parent) ?? []) {
+          if (selected.has(id)) continue
+          selected.add(id)
+          pending.push(id)
+        }
+      }
+      if ([...selected].some((id) => covered.has(id))) continue
+      const children = commitment(rows.filter((row) => selected.has(row.id)))
+      totals.committed += Math.max(reservation.budget, session.cost + children) - reservation.budget
+      for (const id of selected) covered.add(id)
+    }
+    return {
+      recorded: held.recorded,
+      committed: totals.committed + commitment(rows.filter((row) => !covered.has(row.id))),
+    }
+  })
+}
 
 export function direct(db: Ledger, organizationID: string) {
   return db

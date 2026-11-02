@@ -11,7 +11,7 @@ import {
   RayaRoutineJobContractTable as Contract,
 } from "@opencode-ai/core/kilocode/routine.sql"
 import { SessionID } from "@/session/schema"
-import { commitment, direct, standing } from "./commitment"
+import { coverage, direct } from "./commitment"
 import { cost as coordinatorCost } from "./coordinator"
 import { RayaTask } from "./index"
 import { RayaTaskInbox, type Publish } from "./inbox"
@@ -965,8 +965,21 @@ export namespace RayaTaskDelegation {
                     .pipe(Effect.orDie)
                   const spent = yield* direct(tx, organization.id).pipe(Effect.orDie)
                   const coordinated = yield* coordinatorCost(tx, organization.id).pipe(Effect.orDie)
-                  const held = yield* standing(tx, organization.id).pipe(Effect.orDie)
-                  if (commitment(rows) + spent + coordinated + held.committed + budget > owner.budget)
+                  const held = yield* coverage(tx, organization.id, [
+                    ...rows,
+                    {
+                      id: key(value.source),
+                      parent_id: null,
+                      parent_run_id: value.parentRunID ?? null,
+                      sender_id: value.senderID,
+                      organization_id: organization.id,
+                      state: "queued",
+                      budget,
+                      cost: null,
+                      session_id: null,
+                    },
+                  ]).pipe(Effect.orDie)
+                  if (spent + coordinated + held.committed > owner.budget)
                     return yield* new Invalid({
                       message: "This request exceeds the organization's remaining model-cost budget.",
                     })

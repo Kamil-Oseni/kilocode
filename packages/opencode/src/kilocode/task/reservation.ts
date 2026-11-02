@@ -7,7 +7,7 @@ import {
   RayaRoutineOrganizationReservationTable as Reservation,
   RayaRoutineOrganizationTable as Organization,
 } from "@opencode-ai/core/kilocode/routine.sql"
-import { commitment, direct, standing } from "./commitment"
+import { coverage, direct } from "./commitment"
 import { cost as coordinatorCost } from "./coordinator"
 
 export class Conflict extends Data.TaggedError("RayaTaskReservation.Conflict")<{ message: string }> {}
@@ -75,8 +75,8 @@ export function make(database: Database.Interface) {
                 .pipe(Effect.orDie)
               const spent = yield* direct(tx, input.organizationID).pipe(Effect.orDie)
               const coordinated = yield* coordinatorCost(tx, input.organizationID).pipe(Effect.orDie)
-              const held = yield* standing(tx, input.organizationID).pipe(Effect.orDie)
-              if (commitment(work) + spent + coordinated + held.committed + input.budget > organization.budget)
+              const held = yield* coverage(tx, input.organizationID, work).pipe(Effect.orDie)
+              if (spent + coordinated + held.committed + input.budget > organization.budget)
                 return yield* new Conflict({
                   message: "This Routine exceeds the organization's remaining model-cost budget.",
                 })
